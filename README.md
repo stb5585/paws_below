@@ -41,6 +41,10 @@ npm run build
 
 The unit suite checks scoring, powers, saves, treasure selection, map reachability, lava separation, and crossing definitions. The Playwright suite checks desktop rendering, landscape touch input, and the portrait orientation prompt.
 
+## Improvement roadmap
+
+See [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) for the prioritized game, mobile-control, environment-rendering, accessibility, performance, testing, and documentation roadmap.
+
 ## Project structure
 
 - `src/game/data` contains reusable animal, level, collectible, power, map, and treasure definitions.
