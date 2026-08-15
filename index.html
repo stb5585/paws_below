@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#24150f" />
+    <meta name="description" content="Paws Below — a cozy underground dog maze adventure." />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./assets/paws-icon.svg" type="image/svg+xml" />
+    <title>Paws Below</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Paws Below game">
+      <div id="game"></div>
+      <div id="rotate-message" role="status">
+        <span class="rotate-icon">↻</span>
+        <strong>Turn your device sideways</strong>
+        <span>The burrow is wider that way!</span>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

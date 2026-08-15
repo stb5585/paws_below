@@ -1,0 +1,60 @@
+:root {
+  font-family: 'Fredoka', ui-rounded, 'Arial Rounded MT Bold', system-ui, sans-serif;
+  color: #fff8e9;
+  background: #170e0b;
+  font-synthesis: none;
+  --cream: #fff1ca;
+  --cocoa: #3a2118;
+  --coral: #ff8059;
+  --mint: #82e0c1;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body {
+  min-width: 320px;
+  min-height: 320px;
+  background: radial-gradient(circle at center, #4d2c1d 0%, #170e0b 78%);
+  overscroll-behavior: none;
+}
+#game {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+#game canvas {
+  display: block;
+  width: min(100vw, 177.7778vh) !important;
+  width: min(100vw, 177.7778dvh) !important;
+  height: auto !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  max-height: 100dvh !important;
+  aspect-ratio: 16 / 9;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#rotate-message {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .7rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--cream);
+  background: radial-gradient(circle at 50% 40%, #68402b, #20120e 72%);
+}
+.rotate-icon { font-size: 4rem; color: var(--mint); animation: turn 1.6s ease-in-out infinite; }
+#rotate-message strong { font-size: clamp(1.4rem, 7vw, 2.5rem); }
+#rotate-message span:last-child { opacity: .8; }
+@keyframes turn { 50% { transform: rotate(90deg); } }
+@media (orientation: portrait) and (any-pointer: coarse) {
+  #rotate-message { display: flex; }
+}
