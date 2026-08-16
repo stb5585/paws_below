@@ -135,9 +135,17 @@ Pony and kitten should be complete choices, not simple sprite swaps. Each needs 
 - Selection and best scores persist independently.
 - No new animal requires branching logic in `MazeScene`.
 
-### 10. Add customizable colors and extras — Planned
+### 10. Add customizable colors and extras — In progress
 
 Let players personalize animals and home spaces with accessible color choices and extras such as collars, houses, and pony manes. Keep this playful and simple; the roadmap does not assume purchases or a complex inventory economy.
+
+**Foundation completed**
+
+- Profiles now contain a versioned appearance record for each animal with a palette, named cosmetic slots, and home style.
+- Existing saves migrate to independent defaults without losing scores, discoveries, controls, or accessibility settings.
+- Appearance identifiers are sanitized and valid future cosmetic slots survive save/load.
+
+The selection/preview UI, layered sprite attachments, palettes, and actual cosmetic artwork remain future work.
 
 **Implementation direction**
 
@@ -174,15 +182,17 @@ Add maps one at a time, with a distinct visual identity and one understandable g
 - Dynamic HUD/results totals come from level data, never copied constants.
 - Adding a map requires data and assets, not edits scattered across scene logic.
 
-### 12. Add a safe way to reset scores — Planned
+### 12. Add a safe way to reset scores — Complete
 
 Players need a deliberate way to clear best scores without deleting unrelated preferences or accidentally losing everything.
+
+The Settings screen now centralizes sound, lighting, touch-control, and movement preferences. **Reset best scores** requires an explicit confirmation, offers Cancel, clears both aggregate and per-animal scores, and preserves discoveries, badges, controls, and appearance data. Unit and browser tests cover migration, cancellation, confirmation, persistence, and field preservation.
 
 **Recommended experience**
 
 - Add **Reset best scores** in Settings, separate from **Reset all progress** if full reset is ever offered.
 - Show a confirmation naming exactly what will be removed and offer Cancel as the safe default.
-- Reset per-animal/per-map results while preserving controls, accessibility settings, appearance choices, and discovered cosmetics.
+- Reset every currently stored aggregate and per-animal score while preserving controls, accessibility settings, appearance choices, and discoveries. Future per-map score records should join the same reset operation.
 - Confirm completion with a short message; do not reload the page unexpectedly.
 
 **Acceptance criteria**
@@ -267,7 +277,7 @@ TypeScript world definitions are authoritative, and the unused `mapKey`/legacy J
 
 ### 19. Split `MazeScene` into focused systems — In progress
 
-`MazeScene` still owns orchestration, rendering, input, movement, collection, power-ups, hints, audio, UI, and transitions. Continue extracting pure helpers first, then small stateful components with explicit lifecycle methods.
+`EnvironmentRenderer` now owns floor, obstacle, wall, landmark, decor, and home rendering. `MazeScene` still owns orchestration, actor and interactive-object rendering, input, movement, collection, power-ups, hints, lighting updates, audio, UI, and transitions. Continue extracting pure helpers first, then small stateful components with explicit lifecycle methods.
 
 **Suggested sequence**
 
@@ -307,6 +317,28 @@ Documentation should describe the current architecture and controls, while tests
 - Store screenshots only as intentional test artifacts or reviewed baselines, not ad hoc repository clutter.
 - Remove tests that only assert stale source strings when a behavioral assertion is practical.
 
+### 23. Broaden release and real-device test coverage — In progress
+
+The automated suite protects core rules and representative rendering, but deployment testing exposed an important gap: portrait and landscape were tested as separate browser launches, not as an orientation change during one active session. The orientation guard now has unit coverage and a portrait → landscape → portrait browser regression test.
+
+**Next coverage targets**
+
+- Complete all four current animal/map combinations in browser tests, including goal completion, results, best-score persistence, and returning to the title.
+- Exercise resize and orientation changes during menus, gameplay, pause, and installed-PWA use rather than only at startup.
+- Test both Follow Touch and Joystick with simultaneous action-button input on physical Android hardware.
+- Add an installed-PWA release check covering first install, offline relaunch, a missing asset, and accepting an available update.
+- Review intentional screenshot fixtures at two brightness settings and representative 16:9, wide-phone, and tablet viewports.
+- Record frame time, texture memory, time-to-play, battery/heat observations, device/browser version, and any failing fixture seed during release testing.
+- Add keyboard-only and basic screen-reader passes for menus and settings as those interfaces expand.
+
+**Acceptance criteria**
+
+- A release checklist records at least one physical phone and one desktop browser.
+- Every animal/map combination can finish without console errors or unreachable objectives.
+- Rotation never leaves the guard, canvas, HUD, camera, or touch controls in stale dimensions.
+- Offline/update tests run against a production build and deployed service-worker scope.
+- Visual and performance regressions have reproducible viewport, device, and game-state details.
+
 ## Recommended delivery order
 
 ### Package 1 — Renderer correctness (complete)
@@ -324,11 +356,18 @@ Documentation should describe the current architecture and controls, while tests
 - Normalized wall, floor, landmark, home, and crossing anchors and corrected conflicting placements.
 - Level/atlas validation.
 
-### Package 3 — Personalization and animals
+### Release validation checkpoint (current)
 
-- Minimal layered cosmetic system.
+- Deploy the feature branch or release candidate.
+- Complete the real-device and installed-PWA checks in improvement 23.
+- Fix release-blocking renderer, orientation, input, persistence, and performance findings before adding Package 3 animal or cosmetic artwork.
+
+### Package 3 — Personalization and animals (in progress)
+
+- Versioned appearance/profile foundation. **Complete.**
+- Confirmed score-only reset flow. **Complete.**
+- Minimal layered cosmetic rendering and selection UI.
 - Pony and kitten using the same data-driven contract.
-- Score reset and profile migrations.
 
 ### Package 4 — Map variety
 

@@ -330,6 +330,55 @@ test('animal selection flows through map selection with corrected bunny artwork'
   await page.screenshot({path:testInfo.outputPath('bunny-jump-frame.png')});
 });
 
+test('settings cancels or confirms a score-only reset without losing other progress', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 900, collection: ['striped-sock'], pirateBadge: true, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'on', touchMovement: 'joystick',
+    selectedAnimalId: 'cream-bunny', selectedMapId: 'farm', seenAnimals: ['white-dog', 'cream-bunny'],
+    seenLevels: ['white-dog:underground', 'cream-bunny:farm'],
+    bestScores: { 'white-dog': 900, 'cream-bunny': 450 },
+    appearance: { version: 1, animals: {
+      'white-dog': { palette: 'warm-gold', extras: { collar: 'mint-stars' }, homeStyle: 'classic-doghouse' },
+      'cream-bunny': { palette: 'natural-cream', extras: { collar: 'none' }, homeStyle: 'classic-pen' }
+    } }
+  })));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  await page.mouse.click(640, 495);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Settings'))).toBe(true);
+
+  await page.mouse.click(640, 430);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('paws-below-profile-v1')!).bestScore)).toBe(900);
+  await page.screenshot({ path: testInfo.outputPath('settings-reset-confirmation.png') });
+  await page.mouse.click(800, 430);
+  expect(await page.evaluate(() => ({
+    armed: (window as any).__PAWS_GAME__.scene.getScene('Settings').resetArmed,
+    score: JSON.parse(localStorage.getItem('paws-below-profile-v1')!).bestScore
+  }))).toEqual({ armed: false, score: 900 });
+
+  await page.mouse.click(640, 430);
+  await page.mouse.click(480, 430);
+  const reset = await page.evaluate(() => {
+    const profile = JSON.parse(localStorage.getItem('paws-below-profile-v1')!);
+    return {
+      bestScore: profile.bestScore, bestScores: profile.bestScores, collection: profile.collection,
+      pirateBadge: profile.pirateBadge, touchControls: profile.touchControls,
+      touchMovement: profile.touchMovement, appearance: profile.appearance.animals['white-dog']
+    };
+  });
+  expect(reset).toEqual({
+    bestScore: 0, bestScores: { 'white-dog': 0, 'cream-bunny': 0 }, collection: ['striped-sock'],
+    pirateBadge: true, touchControls: 'on', touchMovement: 'joystick',
+    appearance: { palette: 'warm-gold', extras: { collar: 'mint-stars' }, homeStyle: 'classic-doghouse' }
+  });
+  await page.mouse.click(640, 620);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  const bestLabel = await page.evaluate(() => (window as any).__PAWS_GAME__.scene.getScene('Title').children.list
+    .find((object: any) => typeof object.text === 'string' && object.text.startsWith('BEST SCORE'))?.text);
+  expect(bestLabel).toBe('BEST SCORE  0');
+});
+
 test('Mochi is grounded in the refined farm collection quest', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
@@ -433,9 +482,14 @@ test('production service worker serves navigation offline without returning HTML
   await context.setOffline(false);
 });
 
-test('portrait touch devices receive a rotate prompt', async ({ page }, testInfo) => {
+test('portrait touch devices receive a rotate prompt that clears after rotation', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'portrait-guard');
   await page.goto('/');
   await expect(page.locator('#rotate-message')).toBeVisible();
   await expect(page.locator('#rotate-message')).toContainText('Turn your device sideways');
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.locator('#rotate-message')).toBeHidden();
+  await expect(page.locator('canvas')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#rotate-message')).toBeVisible();
 });

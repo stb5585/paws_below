@@ -29,8 +29,9 @@ The installed game launches in landscape standalone mode. Its small menu shell i
 - Dig: E or the bone button; Pip always performs the dig animation, even when there is no buried item nearby
 - Bark/Honk: B or the animal button; Pip barks and Mochi honks. Near active treasure, three calls play and reveal a temporary direction arrow
 - Pause: Escape or the pause button
-- Touch controls: detected automatically on phones and hybrid laptops, or forced on/off from the title and pause menus
-- Touch movement: switch between Follow Touch and Joystick from the title or pause menu
+- Settings: configure sound, lighting, touch controls, and movement style; best scores can be reset separately from treasures and preferences
+- Touch controls: detected automatically on phones and hybrid laptops, or forced on/off from Settings and Pause
+- Touch movement: switch between Follow Touch and Joystick from Settings or Pause
 - Guidance: the HUD tracks the trip home and collection progress, with stronger contextual prompts and extra help if the animal stops making progress
 
 ## Checks
@@ -42,7 +43,7 @@ npm run test:e2e
 npm run build
 ```
 
-The unit suite checks animals and map-specific goals, per-animal scores, scoring, powers, saves, treasure selection, farm and burrow reachability, obstacle separation, crossing definitions, and isometric depth ordering. The Playwright suite checks the title → animal → map flow, both environments, desktop rendering, landscape touch input, the portrait orientation prompt, atlas integrity, and representative behind/in-front renderer fixtures.
+The unit suite checks animals and map-specific goals, per-animal scores, appearance migration, score-only reset behavior, powers, saves, treasure selection, map reachability, obstacle separation, crossing definitions, isometric depth ordering, and orientation-guard decisions. The Playwright suite checks the title → animal → map flow, Settings confirmation/cancellation, both environments, desktop rendering, landscape touch input, same-session portrait/landscape transitions, atlas integrity, and representative behind/in-front renderer fixtures.
 
 ## Improvement roadmap
 

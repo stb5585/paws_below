@@ -13,8 +13,11 @@ import { MapSelectScene } from './game/scenes/MapSelectScene';
 import { GameLoadScene } from './game/scenes/GameLoadScene';
 import { registerServiceWorker } from './pwa';
 import { assertGameContentValid } from './game/systems/validation';
+import { installOrientationGuard } from './orientation';
+import { SettingsScene } from './game/scenes/SettingsScene';
 
 assertGameContentValid();
+installOrientationGuard();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -28,7 +31,7 @@ const game = new Phaser.Game({
     autoCenter: Phaser.Scale.CENTER_BOTH
   },
   input: { activePointers: 3 },
-  scene: [BootScene, TitleScene, AnimalSelectScene, MapSelectScene, TutorialScene, GameLoadScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
+  scene: [BootScene, TitleScene, SettingsScene, AnimalSelectScene, MapSelectScene, TutorialScene, GameLoadScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
 });
 
 if (import.meta.env.DEV) {
