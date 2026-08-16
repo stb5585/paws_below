@@ -196,10 +196,12 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
     const floors = scene.tileViews.filter((view: any) => view.object.texture?.key === 'burrow-atlas'
       && view.object.frame?.name === 'env-0');
     scene.player.x = 3; scene.player.y = 3; scene.positionDog(0, false);
+    scene.updateVisibility();
     scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
     return {
       actor: scene.dog.depth,
       wall: walls[0]?.object.depth,
+      wallAlpha: walls[0]?.object.alpha,
       maximumFloorDepth: Math.max(...floors.map((view: any) => view.object.depth)),
       renderedBlockCells: walls.length
     };
@@ -207,6 +209,7 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(behind.renderedBlockCells).toBe(1);
   expect(behind.actor).toBeGreaterThan(behind.maximumFloorDepth);
   expect(behind.actor).toBeLessThan(behind.wall);
+  expect(behind.wallAlpha).toBeCloseTo(.4, 2);
   const undergroundFixture = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     const images = scene.tileViews.filter((view: any) => view.object.texture);
@@ -233,10 +236,12 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
     const wall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 3
       && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
     scene.player.x = 5; scene.player.y = 4; scene.positionDog(0, false);
+    scene.updateVisibility();
     scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
-    return { actor: scene.dog.depth, wall: wall.object.depth };
+    return { actor: scene.dog.depth, wall: wall.object.depth, wallAlpha: wall.object.alpha };
   });
   expect(inFront.actor).toBeGreaterThan(inFront.wall);
+  expect(inFront.wallAlpha).toBe(1);
   await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
 });
 

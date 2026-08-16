@@ -11,6 +11,7 @@ export interface EnvironmentView {
   point: GridPoint;
   object: Phaser.GameObjects.Shape | Phaser.GameObjects.Image;
   discovered: boolean;
+  occludesActor: boolean;
 }
 
 const BURROW_FLOOR = { a: 0x8d5d3d, b: 0x7b4c35, edge: 0x4d2d23 };
@@ -78,8 +79,12 @@ export class EnvironmentRenderer {
     placeProjectedSprite(this.scene, level.exit, home);
   }
 
-  private track(point: GridPoint, ...objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>): void {
-    objects.forEach(object => this.views.push({ point, object, discovered: false }));
+  private track(
+    point: GridPoint,
+    objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>,
+    occludesActor = false
+  ): void {
+    objects.forEach(object => this.views.push({ point, object, discovered: false, occludesActor }));
   }
 
   private drawFloor(point: GridPoint): void {
@@ -92,7 +97,7 @@ export class EnvironmentRenderer {
       const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
         depth: GroundDepth.detail, alpha: .72
       });
-      this.track(point, base, texture);
+      this.track(point, [base, texture]);
       return;
     }
     const color = (point.x + point.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
@@ -101,7 +106,7 @@ export class EnvironmentRenderer {
     const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
       depth: GroundDepth.detail
     });
-    this.track(point, base, texture);
+    this.track(point, [base, texture]);
   }
 
   private drawLava(point: GridPoint): Phaser.GameObjects.Graphics {
@@ -137,7 +142,7 @@ export class EnvironmentRenderer {
     const choices = this.world.rendering.crossingAssets;
     const definition = ENVIRONMENT_ASSETS[choices[Math.max(0, pathIndex) % choices.length]];
     const image = placeProjectedSprite(this.scene, point, definition, { depth: GroundDepth.detail });
-    this.track(point, image);
+    this.track(point, [image]);
   }
 
   private drawWalls(): void {
@@ -164,14 +169,14 @@ export class EnvironmentRenderer {
       const point = { x, y };
       const definition = ENVIRONMENT_ASSETS[assetForWall(this.world, point, blocks.has(key))];
       const image = placeProjectedSprite(this.scene, point, definition);
-      this.track(point, image);
+      this.track(point, [image], true);
     });
   }
 
   private drawDecor(item: WorldPropPlacement): void {
     const definition = ENVIRONMENT_ASSETS[item.asset];
     const image = placeProjectedSprite(this.scene, item, definition, { size: item.size });
-    this.track(item, image);
+    this.track(item, [image]);
     if (item.animated) {
       this.scene.tweens.add({
         targets: image, alpha: { from: .82, to: 1 },

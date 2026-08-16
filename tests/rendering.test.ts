@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
-  diamondPoints, projectGridPoint, worldDepth
+  ACTOR_OCCLUDER_MIN_ALPHA, GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
+  actorOccluderAlpha, diamondPoints, projectGridPoint, worldDepth
 } from '../src/game/systems/rendering';
 import { ENVIRONMENT_ASSETS } from '../src/game/rendering/catalog';
 
@@ -27,6 +27,14 @@ describe('isometric rendering order', () => {
   it('keeps fixed interface layers above the complete supported world', () => {
     expect(UiDepth.hud).toBeGreaterThan(worldDepth(1_650, WorldLayer.effect));
     expect(UiDepth.modal).toBeGreaterThan(UiDepth.touchContent);
+  });
+
+  it('fades only nearby objects that sort in front of the actor', () => {
+    expect(actorOccluderAlpha(1, 1, true)).toBe(ACTOR_OCCLUDER_MIN_ALPHA);
+    expect(actorOccluderAlpha(1, 1.25, true)).toBeCloseTo(.7);
+    expect(actorOccluderAlpha(1, 1.5, true)).toBe(1);
+    expect(actorOccluderAlpha(1, 1, false)).toBe(1);
+    expect(actorOccluderAlpha(.25, 1, true)).toBe(.25);
   });
 
   it('projects grid coordinates through one explicit isometric contract', () => {

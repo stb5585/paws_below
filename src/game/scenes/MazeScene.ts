@@ -13,7 +13,7 @@ import { shouldShowTouchControls } from '../systems/device';
 import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
-import { UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
+import { actorOccluderAlpha, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
 import { EnvironmentRenderer, type EnvironmentView } from '../rendering/EnvironmentRenderer';
 
 interface PlayerModel extends GridPoint { jumpLift: number }
@@ -551,7 +551,11 @@ export class MazeScene extends Phaser.Scene {
     this.tileViews.forEach(tile=>{
       const distance=Phaser.Math.Distance.Between(this.player.x,this.player.y,tile.point.x,tile.point.y);
       if(distance<radius*.65)tile.discovered=true;
-      tile.object.setAlpha(this.profile.fullBrightness ? 1 : distance < radius ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035);
+      const baseAlpha = this.profile.fullBrightness ? 1 : distance < radius
+        ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035;
+      tile.object.setAlpha(actorOccluderAlpha(
+        baseAlpha, distance, tile.occludesActor && tile.object.depth > this.dog.depth
+      ));
     });
     const sniff=this.run.isPowerActive('sniff',now);
     this.collectibleViews.forEach(view=>{
