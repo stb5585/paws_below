@@ -12,6 +12,9 @@ import { AnimalSelectScene } from './game/scenes/AnimalSelectScene';
 import { MapSelectScene } from './game/scenes/MapSelectScene';
 import { GameLoadScene } from './game/scenes/GameLoadScene';
 import { registerServiceWorker } from './pwa';
+import { assertGameContentValid } from './game/systems/validation';
+
+assertGameContentValid();
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,

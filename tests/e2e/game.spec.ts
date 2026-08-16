@@ -172,6 +172,66 @@ test('every gameplay atlas keeps visible pixels inside guarded frame cells', asy
   }
 });
 
+test('isometric depth follows ground contact around a blocked tile', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'underground', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:underground'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
+  })));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  await page.mouse.click(640, 270);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('AnimalSelect'))).toBe(true);
+  await page.mouse.click(390, 530);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('MapSelect'))).toBe(true);
+  await page.mouse.click(390, 535);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Maze')), { timeout: 30_000 }).toBe(true);
+
+  const behind = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const walls = scene.tileViews.filter((view: any) => view.point.x === 4 && view.point.y === 3
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    scene.player.x = 3; scene.player.y = 3; scene.positionDog(0, false);
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    return { actor: scene.dog.depth, wall: walls[0]?.object.depth, renderedBlockCells: walls.length };
+  });
+  expect(behind.renderedBlockCells).toBe(1);
+  expect(behind.actor).toBeLessThan(behind.wall);
+  const undergroundFixture = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const images = scene.tileViews.filter((view: any) => view.object.texture);
+    const crossings = images.filter((view: any) => view.object.texture.key === 'burrow-atlas' && view.object.frame.name === 'env-3');
+    const floor = images.find((view: any) => view.object.texture.key === 'burrow-atlas' && view.object.originY < .6);
+    const homes = scene.children.list.filter((object: any) => object.texture?.key === 'burrow-atlas' && object.frame?.name === 'env-4');
+    return {
+      crossings: crossings.length,
+      expectedCrossings: new Set(scene.world.jumpPaths.flat()
+        .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
+        .map((point: any) => `${point.x},${point.y}`)).size,
+      floorAnchorY: floor?.object.originY,
+      wallAnchorY: images.find((view: any) => view.object.frame.name === 'env-1')?.object.originY,
+      homes: homes.length
+    };
+  });
+  expect(undergroundFixture).toEqual(expect.objectContaining({ crossings: 8, expectedCrossings: 8, homes: 1 }));
+  expect(undergroundFixture.floorAnchorY).toBeCloseTo(.536, 3);
+  expect(undergroundFixture.wallAnchorY).toBeCloseTo(.763, 3);
+  await page.screenshot({ path: testInfo.outputPath('depth-behind-wall.png') });
+
+  const inFront = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const wall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 3
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    scene.player.x = 5; scene.player.y = 4; scene.positionDog(0, false);
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    return { actor: scene.dog.depth, wall: wall.object.depth };
+  });
+  expect(inFront.actor).toBeGreaterThan(inFront.wall);
+  await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
+});
+
 test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
@@ -291,6 +351,35 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     collectibles:scene.collectibleViews.length
   };});
   expect(farm).toEqual({animal:'cream-bunny',map:'farm',theme:'farm',goal:'collectThenReachExit',digSpots:4,collectibles:36});
+  const farmFixture = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 7; scene.player.y = 7; scene.positionDog(0, false);
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const images = scene.tileViews.filter((view: any) => view.object.texture?.key === 'farm-atlas');
+    const crossingKeys = new Set(scene.world.jumpPaths.flat()
+      .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
+      .map((point: any) => `${point.x},${point.y}`));
+    const crossings = images.filter((view: any) => crossingKeys.has(`${view.point.x},${view.point.y}`)
+      && ['farm-4', 'farm-5'].includes(view.object.frame.name));
+    const blockCounts = scene.world.blocks.flatMap((block: any) => {
+      const counts: number[] = [];
+      for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
+        counts.push(images.filter((view: any) => view.point.x === x && view.point.y === y && view.object.frame.name === 'farm-1').length);
+      }
+      return counts;
+    });
+    return {
+      crossings: crossings.length,
+      expectedCrossings: crossingKeys.size,
+      everyBlockOnce: blockCounts.every((count: number) => count === 1),
+      grassAnchorY: images.find((view: any) => view.object.frame.name === 'farm-0')?.object.originY,
+      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length
+    };
+  });
+  expect(farmFixture).toEqual(expect.objectContaining({
+    crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1
+  }));
+  expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
   await page.screenshot({path:testInfo.outputPath('farm-map.png')});
 });
 

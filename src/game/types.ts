@@ -29,7 +29,6 @@ export interface LevelDefinition {
   id: string;
   animalId: string;
   mapId: MapId;
-  mapKey: string;
   title: string;
   goal: GoalDefinition;
   start: GridPoint;

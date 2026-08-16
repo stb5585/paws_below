@@ -1,8 +1,5 @@
 import type { CollectibleDefinition, DigSpotDefinition, GridPoint, PowerKind } from '../types';
 
-export const TILE_W = 96;
-export const TILE_H = 48;
-
 export interface GridRect { x: number; y: number; width: number; height: number }
 
 export const ROOMS: GridRect[] = [
@@ -80,8 +77,4 @@ export function isFloorCell(x: number, y: number): boolean {
 
 export function isLavaCell(x: number, y: number): boolean {
   return LAVA_RECTS.some(rect => pointInRect(x, y, rect));
-}
-
-export function gridToWorld(point: GridPoint): GridPoint {
-  return { x: 1650 + (point.x - point.y) * TILE_W / 2, y: 80 + (point.x + point.y) * TILE_H / 2 };
 }
