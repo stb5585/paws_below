@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getGameLayout, type GameLayout } from './systems/layout';
 
 export interface ButtonOptions {
   width?: number;
@@ -9,11 +10,32 @@ export interface ButtonOptions {
   icon?: string;
 }
 
-export function addMenuBackground(scene: Phaser.Scene, shade = .34): Phaser.GameObjects.Image {
-  const background = scene.add.image(640, 360, 'menu-burrow-v2');
-  const scale = Math.max(1280 / background.width, 720 / background.height);
-  background.setScale(scale).setDepth(-100);
-  scene.add.rectangle(640, 360, 1280, 720, 0x170d0a, shade).setDepth(-99);
+export function bindSafeScene(scene: Phaser.Scene, onLayout?: (layout: GameLayout) => void): () => void {
+  const update = () => {
+    const layout = getGameLayout(scene);
+    scene.cameras.main.setScroll(-layout.safeX, -layout.safeY);
+    onLayout?.(layout);
+  };
+  scene.scale.on(Phaser.Scale.Events.RESIZE, update);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.scale.off(Phaser.Scale.Events.RESIZE, update));
+  update();
+  return update;
+}
+
+export function addViewportShade(scene: Phaser.Scene, color: number, alpha: number): Phaser.GameObjects.Rectangle {
+  const shade = scene.add.rectangle(0, 0, 1, 1, color, alpha).setOrigin(0).setScrollFactor(0);
+  bindSafeScene(scene, layout => shade.setPosition(0, 0).setDisplaySize(layout.width, layout.height));
+  return shade;
+}
+
+export function addMenuBackground(scene: Phaser.Scene, shade = .34, texture = 'menu-burrow-v2'): Phaser.GameObjects.Image {
+  const background = scene.add.image(0, 0, texture).setScrollFactor(0).setDepth(-100);
+  const overlay = scene.add.rectangle(0, 0, 1, 1, 0x170d0a, shade).setOrigin(0).setScrollFactor(0).setDepth(-99);
+  bindSafeScene(scene, layout => {
+    const scale = Math.max(layout.width / background.width, layout.height / background.height);
+    background.setPosition(layout.centerX, layout.centerY).setScale(scale);
+    overlay.setPosition(0, 0).setDisplaySize(layout.width, layout.height);
+  });
   return background;
 }
 

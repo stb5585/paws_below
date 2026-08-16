@@ -39,6 +39,13 @@ describe('handcrafted burrow map', () => {
     expect(COLLECTIBLES.filter(item => item.kind === 'treat')).toHaveLength(6);
   });
 
+  it('gives treats the larger forgiving pickup radius', () => {
+    const food = COLLECTIBLES.filter(item => item.kind === 'food');
+    const treats = COLLECTIBLES.filter(item => item.kind === 'treat');
+    expect(treats.every(item => item.pickupRadius === 1.15)).toBe(true);
+    expect(Math.min(...treats.map(item => item.pickupRadius!))).toBeGreaterThan(Math.max(...food.map(item => item.pickupRadius!)));
+  });
+
   it('keeps ordinary walking cells out of lava', () => {
     for (let y=0;y<24;y++) for (let x=0;x<34;x++) expect(isFloorCell(x,y) && isLavaCell(x,y)).toBe(false);
   });

@@ -1,7 +1,7 @@
 {
   "name": "Paws Below",
   "short_name": "Paws Below",
-  "description": "A cozy underground maze adventure starring Pip the puppy.",
+  "description": "A cozy animal maze adventure through an underground burrow and sunny farm field.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
@@ -12,28 +12,22 @@
   "categories": ["games", "kids"],
   "icons": [
     {
-      "src": "assets/paws-icon-192.png",
+      "src": "assets/paws-icon-v2-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "assets/paws-icon-512.png",
+      "src": "assets/paws-icon-v2-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "assets/paws-icon-512.png",
+      "src": "assets/paws-icon-v2-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "assets/paws-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
     }
   ]
 }

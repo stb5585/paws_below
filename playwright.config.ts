@@ -12,7 +12,10 @@ export default defineConfig({
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 } } },
     { name: 'mobile-landscape', use: { ...devices['iPhone 13 landscape'], browserName: 'chromium' } },
-    { name: 'portrait-guard', use: { ...devices['iPhone 13'], browserName: 'chromium' } }
+    { name: 'portrait-guard', use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'wide-19-5', use: { ...devices['Desktop Chrome'], viewport: { width: 1560, height: 720 } } },
+    { name: 'wide-20-9', use: { ...devices['Desktop Chrome'], viewport: { width: 1600, height: 720 } } },
+    { name: 'tablet-4-3', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 960 } } }
   ],
   webServer: {
     command: 'npm run dev',

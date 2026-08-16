@@ -8,6 +8,8 @@ import { PauseScene } from './game/scenes/PauseScene';
 import { OwnerReturnScene } from './game/scenes/OwnerReturnScene';
 import { CollectionScene } from './game/scenes/CollectionScene';
 import { ResultsScene } from './game/scenes/ResultsScene';
+import { AnimalSelectScene } from './game/scenes/AnimalSelectScene';
+import { MapSelectScene } from './game/scenes/MapSelectScene';
 import { registerServiceWorker } from './pwa';
 
 const game = new Phaser.Game({
@@ -17,9 +19,14 @@ const game = new Phaser.Game({
   height: 720,
   backgroundColor: '#1d110d',
   render: { antialias: true, pixelArt: false, roundPixels: false },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: {
+    mode: Phaser.Scale.EXPAND,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    min: { width: 1280, height: 720 },
+    max: { width: 1920, height: 1080 }
+  },
   input: { activePointers: 3 },
-  scene: [BootScene, TitleScene, TutorialScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
+  scene: [BootScene, TitleScene, AnimalSelectScene, MapSelectScene, TutorialScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
 });
 
 if (import.meta.env.DEV) {

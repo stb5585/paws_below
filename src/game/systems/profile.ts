@@ -1,4 +1,5 @@
-import type { TouchControlPreference } from './device';
+import type { TouchControlPreference, TouchMovementPreference } from './device';
+import type { MapId } from '../types';
 
 export const PROFILE_KEY = 'paws-below-profile-v1';
 
@@ -11,6 +12,12 @@ export interface PlayerProfile {
   fullBrightness: boolean;
   tutorialSeen: boolean;
   touchControls: TouchControlPreference;
+  touchMovement: TouchMovementPreference;
+  selectedAnimalId: string;
+  selectedMapId: MapId;
+  seenAnimals: string[];
+  seenLevels: string[];
+  bestScores: Record<string, number>;
 }
 
 export const DEFAULT_PROFILE: PlayerProfile = {
@@ -21,31 +28,62 @@ export const DEFAULT_PROFILE: PlayerProfile = {
   muted: false,
   fullBrightness: false,
   tutorialSeen: false,
-  touchControls: 'auto'
+  touchControls: 'auto',
+  touchMovement: 'follow',
+  selectedAnimalId: 'white-dog',
+  selectedMapId: 'underground',
+  seenAnimals: [],
+  seenLevels: [],
+  bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
 };
 
+function freshDefaultProfile(): PlayerProfile {
+  return { ...DEFAULT_PROFILE, collection: [], seenAnimals: [], seenLevels: [], bestScores: { ...DEFAULT_PROFILE.bestScores } };
+}
+
 export function sanitizeProfile(value: unknown): PlayerProfile {
-  if (!value || typeof value !== 'object') return { ...DEFAULT_PROFILE };
+  if (!value || typeof value !== 'object') return freshDefaultProfile();
   const candidate = value as Partial<PlayerProfile>;
-  if (candidate.version !== 1) return { ...DEFAULT_PROFILE };
+  if (candidate.version !== 1) return freshDefaultProfile();
+  const bestScore = Number.isFinite(candidate.bestScore) && Number(candidate.bestScore) >= 0 ? Number(candidate.bestScore) : 0;
   return {
     version: 1,
-    bestScore: Number.isFinite(candidate.bestScore) && Number(candidate.bestScore) >= 0 ? Number(candidate.bestScore) : 0,
+    bestScore,
     collection: Array.isArray(candidate.collection) ? [...new Set(candidate.collection.filter((x): x is string => typeof x === 'string'))] : [],
     pirateBadge: candidate.pirateBadge === true,
     muted: candidate.muted === true,
     fullBrightness: candidate.fullBrightness === true,
     tutorialSeen: candidate.tutorialSeen === true,
-    touchControls: candidate.touchControls === 'on' || candidate.touchControls === 'off' ? candidate.touchControls : 'auto'
+    touchControls: candidate.touchControls === 'on' || candidate.touchControls === 'off' ? candidate.touchControls : 'auto',
+    touchMovement: candidate.touchMovement === 'joystick' ? 'joystick' : 'follow',
+    selectedAnimalId: candidate.selectedAnimalId === 'cream-bunny' ? 'cream-bunny' : 'white-dog',
+    selectedMapId: candidate.selectedMapId === 'farm' ? 'farm' : 'underground',
+    seenAnimals: Array.isArray(candidate.seenAnimals)
+      ? [...new Set(candidate.seenAnimals.filter((id): id is string => id === 'white-dog' || id === 'cream-bunny'))]
+      : candidate.tutorialSeen === true ? ['white-dog'] : [],
+    seenLevels: Array.isArray(candidate.seenLevels)
+      ? [...new Set(candidate.seenLevels.filter((id): id is string => typeof id === 'string'))]
+      : [],
+    bestScores: sanitizeBestScores(candidate.bestScores, bestScore)
   };
+}
+
+function sanitizeBestScores(value: unknown, legacyBest: number): Record<string, number> {
+  const scores = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const valid = (id: string, fallback = 0) => Number.isFinite(scores[id]) && Number(scores[id]) >= 0 ? Number(scores[id]) : fallback;
+  return { 'white-dog': valid('white-dog', legacyBest), 'cream-bunny': valid('cream-bunny') };
+}
+
+export function animalBestScore(profile: PlayerProfile, animalId: string): number {
+  return profile.bestScores[animalId] ?? 0;
 }
 
 export function loadProfile(storage: Pick<Storage, 'getItem'> = localStorage): PlayerProfile {
   try {
     const raw = storage.getItem(PROFILE_KEY);
-    return raw ? sanitizeProfile(JSON.parse(raw)) : { ...DEFAULT_PROFILE };
+    return raw ? sanitizeProfile(JSON.parse(raw)) : freshDefaultProfile();
   } catch {
-    return { ...DEFAULT_PROFILE };
+    return freshDefaultProfile();
   }
 }
 

@@ -1,18 +1,26 @@
 import Phaser from 'phaser';
-import { TREASURE_SPRITE_FRAMES } from '../data/content';
+import { FARM_TREASURE_SPRITE_FRAMES, TREASURE_SPRITE_FRAMES } from '../data/content';
 import type { RunResults } from '../types';
 import { addMenuBackground, addPanel, createButton, heading } from '../ui';
+import { getAnimal } from '../data/content';
 
 export class OwnerReturnScene extends Phaser.Scene {
   constructor() { super('OwnerReturn'); }
 
   create(): void {
     const results = this.registry.get('lastRun') as RunResults;
+    const animal = getAnimal(results.animalId);
     addMenuBackground(this, .3);
-    heading(this, 640, 74, 'BACK HOME!', 56);
+    const farm = results.mapId === 'farm';
+    heading(this, 640, 74, farm ? 'FARM QUEST COMPLETE!' : animal.id === 'cream-bunny' ? 'BACK TO THE PEN!' : 'BACK HOME!', 56);
     this.add.circle(640, 280, 150, 0xffd481, .2);
-    this.add.image(640, 280, 'pip-animations-v2', 'pip-15').setDisplaySize(260, 260);
-    this.add.text(640, 408, results.treasures.length ? 'Pip brought everything back!' : 'Pip made it safely home!', {
+    const portraitSize = 260 * (animal.portraitScale ?? 1);
+    this.add.image(640 + (animal.portraitOffsetX ?? 0) * 1.25, 280 + (animal.portraitOffsetY ?? 0) * 1.25, animal.spriteTexture, `${animal.spriteKey}-15`)
+      .setDisplaySize(portraitSize, portraitSize);
+    const returnMessage = results.treasures.length
+      ? `${animal.displayName} brought everything back!`
+      : `${animal.displayName} made it safely to the ${farm ? 'barn' : animal.homeName}!`;
+    this.add.text(640, 408, returnMessage, {
       fontFamily: 'Fredoka, sans-serif', fontSize: '31px', color: '#fff1ca', fontStyle: 'bold'
     }).setOrigin(.5);
     if (results.treasures.length) {
@@ -21,8 +29,8 @@ export class OwnerReturnScene extends Phaser.Scene {
       const firstX = 640 - (results.treasures.length - 1) * gap / 2;
       results.treasures.forEach((item, index) => {
         const reward = item.kind === 'pirate'
-          ? this.add.image(firstX + index * gap, 500, 'burrow-atlas-v2', 'env-14').setDisplaySize(74, 74)
-          : this.add.image(firstX + index * gap, 500, 'household-treasures-v2', `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`).setDisplaySize(68, 84);
+          ? this.add.image(firstX + index * gap, 500, 'burrow-atlas-v4', 'env-14').setDisplaySize(74, 74)
+          : this.add.image(firstX + index * gap, 500, farm ? 'farm-treasures-v3' : 'household-treasures-v4', farm ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[item.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`).setDisplaySize(68, 84);
         reward.setAngle((index % 2 ? 1 : -1) * 3);
       });
     }

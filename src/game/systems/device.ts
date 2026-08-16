@@ -1,4 +1,5 @@
 export type TouchControlPreference = 'auto' | 'on' | 'off';
+export type TouchMovementPreference = 'follow' | 'joystick';
 
 export interface TouchEnvironment {
   maxTouchPoints: number;

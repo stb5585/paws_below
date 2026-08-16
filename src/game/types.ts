@@ -1,6 +1,7 @@
 export type GoalDefinition =
   | { type: 'reachExit'; exitId: string }
-  | { type: 'collect'; target: number; collectibleKind: CollectibleKind };
+  | { type: 'collect'; target: number; collectibleKind: CollectibleKind }
+  | { type: 'collectThenReachExit'; target: number; collectibleKind: CollectibleKind; exitId: string };
 
 export interface AnimalDefinition {
   id: string;
@@ -8,18 +9,34 @@ export interface AnimalDefinition {
   displayName: string;
   baseSpeed: number;
   spriteKey: string;
+  spriteTexture: string;
+  foodName: string;
+  foodIcon: string;
+  homeName: string;
+  actionLabel: string;
+  actionIcon: string;
+  homeTexture: string;
+  homeFrame: string;
   goal: GoalDefinition;
+  portraitScale?: number;
+  portraitOffsetX?: number;
+  portraitOffsetY?: number;
+  gameScale?: number;
+  groundOffsetY?: number;
 }
 
 export interface LevelDefinition {
   id: string;
   animalId: string;
+  mapId: MapId;
   mapKey: string;
   title: string;
   goal: GoalDefinition;
   start: GridPoint;
   exit: GridPoint;
 }
+
+export type MapId = 'underground' | 'farm';
 
 export type CollectibleKind = 'food' | 'treat';
 export type PowerKind = 'zoomie' | 'glow' | 'sniff';
@@ -30,6 +47,7 @@ export interface CollectibleDefinition {
   position: GridPoint;
   points: number;
   power?: PowerKind;
+  pickupRadius?: number;
 }
 
 export interface PowerDefinition {
@@ -72,8 +90,14 @@ export interface PlayerActions {
 }
 
 export interface RunResults {
+  animalId: string;
+  mapId: MapId;
   score: number;
   foodFound: number;
+  requiredFood: number;
+  totalFood: number;
+  totalTreats: number;
+  totalTreasures: number;
   treatsFound: number;
   treasures: BuriedTreasureDefinition[];
   pirateFound: boolean;
