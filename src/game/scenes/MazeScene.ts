@@ -13,8 +13,8 @@ import { shouldShowTouchControls } from '../systems/device';
 import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
-import { actorOccluderAlpha, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
-import { EnvironmentRenderer, type EnvironmentView } from '../rendering/EnvironmentRenderer';
+import { ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
+import { EnvironmentRenderer, type EnvironmentOcclusionGroup, type EnvironmentView } from '../rendering/EnvironmentRenderer';
 
 interface PlayerModel extends GridPoint { jumpLift: number }
 interface CollectibleView { definition: CollectibleDefinition; object: Phaser.GameObjects.Container; collected: boolean }
@@ -29,11 +29,13 @@ export class MazeScene extends Phaser.Scene {
   private world: WorldDefinition = UNDERGROUND_WORLD;
   private dog!: Phaser.GameObjects.Container;
   private dogSprite!: Phaser.GameObjects.Sprite;
+  private dogOcclusionSprite!: Phaser.GameObjects.Sprite;
   private barkBubble!: Phaser.GameObjects.Text;
   private run = new RunState();
   private profile!: PlayerProfile;
   private audio!: Soundscape;
   private tileViews: EnvironmentView[] = [];
+  private wallOcclusionGroups: EnvironmentOcclusionGroup[] = [];
   private collectibleViews: CollectibleView[] = [];
   private digViews: DigView[] = [];
   private scoreText!: Phaser.GameObjects.Text;
@@ -78,9 +80,10 @@ export class MazeScene extends Phaser.Scene {
     this.audio = this.registry.get('soundscape') as Soundscape;
     this.player = { ...this.level.start, jumpLift: 0 };
     this.run = new RunState();
-    this.tileViews = []; this.collectibleViews = []; this.digViews = [];
+    this.tileViews = []; this.wallOcclusionGroups = []; this.collectibleViews = []; this.digViews = [];
     this.visited.clear(); this.busy = false; this.finished = false;
     this.touchUi = []; this.joystickUi = []; this.touchTargets = []; this.actionButtons.clear(); this.uiAnchors = [];
+    this.queued = { jump: false, dig: false, bark: false, pause: false };
     this.touchVector.set(0); this.joystickPointer = undefined; this.followPointer = undefined;
     this.pickupFrom = { x:this.player.x, y:this.player.y };
     this.lastDiscovery = this.time.now;
@@ -91,6 +94,7 @@ export class MazeScene extends Phaser.Scene {
     this.cameras.main.setBounds(0, 0, 3500, 1650);
     const environment = new EnvironmentRenderer(this, this.world);
     this.tileViews = environment.render();
+    this.wallOcclusionGroups = environment.getOcclusionGroups();
     this.createCollectibles();
     this.createDigSpots();
     environment.renderHome(this.level, this.animal);
@@ -124,7 +128,11 @@ export class MazeScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     if (this.finished) return;
     const actions = this.readActions();
-    if (actions.pause) { this.scene.pause(); this.scene.launch('Pause'); return; }
+    if (actions.pause) {
+      this.queued.pause = false;
+      this.stopTouchMovement();
+      this.scene.pause(); this.scene.launch('Pause'); return;
+    }
     if (actions.bark) this.bark();
     if (actions.dig) this.tryDig();
     if (actions.jump) this.tryJump(actions.moveX, actions.moveY);
@@ -178,6 +186,8 @@ export class MazeScene extends Phaser.Scene {
     this.dogSprite.play(`${this.animal.spriteKey}-idle`);
     const startWorld=projectGridPoint(this.player);
     this.dog = this.add.container(0, 0, [shadow, this.dogSprite]).setDepth(worldDepth(startWorld.y, WorldLayer.actor));
+    this.dogOcclusionSprite = this.add.sprite(0, 0, this.animal.spriteTexture, `${this.animal.spriteKey}-14`)
+      .setDisplaySize(spriteSize, spriteSize).setAlpha(ACTOR_OCCLUSION_ALPHA).setVisible(false);
     this.barkBubble = this.add.text(0, -105, 'WOOF!', {
       fontFamily:'Fredoka, sans-serif',fontSize:'25px',color:'#fff3c9',fontStyle:'bold',stroke:'#4a281d',strokeThickness:5
     }).setOrigin(.5).setAlpha(0);
@@ -553,9 +563,7 @@ export class MazeScene extends Phaser.Scene {
       if(distance<radius*.65)tile.discovered=true;
       const baseAlpha = this.profile.fullBrightness ? 1 : distance < radius
         ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035;
-      tile.object.setAlpha(actorOccluderAlpha(
-        baseAlpha, distance, tile.occludesActor && tile.object.depth > this.dog.depth
-      ));
+      tile.object.setAlpha(baseAlpha);
     });
     const sniff=this.run.isPowerActive('sniff',now);
     this.collectibleViews.forEach(view=>{
@@ -613,13 +621,24 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private positionDog(time:number,moving:boolean):void{
-    const world=projectGridPoint(this.player);this.dog.setPosition(world.x,world.y+this.player.jumpLift).setDepth(worldDepth(world.y, WorldLayer.actor));
+    const world=projectGridPoint(this.player);
+    this.dog.setPosition(world.x,world.y+this.player.jumpLift)
+      .setDepth(worldDepth(world.y, WorldLayer.actor));
     if (!this.busy) {
       const desiredAnimation = moving ? `${this.animal.spriteKey}-run` : `${this.animal.spriteKey}-idle`;
       if (this.dogSprite.anims.currentAnim?.key !== desiredAnimation) this.dogSprite.play(desiredAnimation, true);
     }
     this.dogSprite.y = -30 + (this.animal.groundOffsetY ?? 0) + (moving && !this.busy ? Math.sin(time * .018) * 2 : 0);
     if(this.lastMove.x<-.08)this.dogSprite.setFlipX(true);else if(this.lastMove.x>.08)this.dogSprite.setFlipX(false);
+    const occludingGroups = this.wallOcclusionGroups.filter(group => group.members.some(member =>
+      member.object.depth > this.dog.depth
+      && Phaser.Math.Distance.Between(this.player.x,this.player.y,member.point.x,member.point.y) < ACTOR_OCCLUDER_DISTANCE
+    ));
+    const overlayDepth = actorOverlayDepth(occludingGroups.flatMap(group => group.members.map(member => member.object.depth)));
+    this.dogOcclusionSprite.setPosition(world.x, world.y + this.player.jumpLift + this.dogSprite.y)
+      .setFrame(this.dogSprite.frame.name).setFlipX(this.dogSprite.flipX)
+      .setVisible(overlayDepth !== undefined);
+    if (overlayDepth !== undefined) this.dogOcclusionSprite.setDepth(overlayDepth);
   }
 
   private checkExit():void{

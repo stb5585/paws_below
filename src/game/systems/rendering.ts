@@ -60,9 +60,8 @@ export const UiDepth = {
   modal: 1_000_300
 } as const;
 
-export const ACTOR_OCCLUDER_FADE_START = 1;
-export const ACTOR_OCCLUDER_FADE_END = 1.5;
-export const ACTOR_OCCLUDER_MIN_ALPHA = .4;
+export const ACTOR_OCCLUDER_DISTANCE = 1.5;
+export const ACTOR_OCCLUSION_ALPHA = .55;
 
 export type WorldLayerOffset = typeof WorldLayer[keyof typeof WorldLayer];
 
@@ -70,11 +69,6 @@ export function worldDepth(groundY: number, layer: WorldLayerOffset = WorldLayer
   return Math.round(groundY * WORLD_DEPTH_STRIDE) + layer;
 }
 
-export function actorOccluderAlpha(baseAlpha: number, distance: number, inFrontOfActor: boolean): number {
-  if (!inFrontOfActor || distance >= ACTOR_OCCLUDER_FADE_END) return baseAlpha;
-  const fadeProgress = Math.max(0, Math.min(1,
-    (distance - ACTOR_OCCLUDER_FADE_START) / (ACTOR_OCCLUDER_FADE_END - ACTOR_OCCLUDER_FADE_START)
-  ));
-  const readableAlpha = ACTOR_OCCLUDER_MIN_ALPHA + (1 - ACTOR_OCCLUDER_MIN_ALPHA) * fadeProgress;
-  return Math.min(baseAlpha, readableAlpha);
+export function actorOverlayDepth(occluderDepths: readonly number[]): number | undefined {
+  return occluderDepths.length ? Math.max(...occluderDepths) + 1 : undefined;
 }

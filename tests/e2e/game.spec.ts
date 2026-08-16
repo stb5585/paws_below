@@ -135,6 +135,45 @@ test('landscape touch layout accepts gameplay taps', async ({ page }, testInfo) 
   await expect(canvas).toBeVisible();
 });
 
+test('pause actions clear when resuming or abandoning a run', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'underground', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:underground'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
+  })));
+  const active = (scene: string) => page.evaluate(key => (window as any).__PAWS_GAME__.scene.isActive(key), scene);
+  const enterMaze = async () => {
+    await page.mouse.click(640, 270);
+    await expect.poll(() => active('AnimalSelect')).toBe(true);
+    await page.mouse.click(390, 530);
+    await expect.poll(() => active('MapSelect')).toBe(true);
+    await page.mouse.click(390, 535);
+    await expect.poll(() => active('Maze'), { timeout: 30_000 }).toBe(true);
+  };
+
+  await page.goto('/');
+  await expect.poll(() => active('Title')).toBe(true);
+  await enterMaze();
+  await page.evaluate(() => { (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause = true; });
+  await expect.poll(() => active('Pause')).toBe(true);
+  await page.mouse.click(640, 155);
+  await expect.poll(() => active('Pause')).toBe(false);
+  await page.waitForTimeout(350);
+  expect(await active('Maze')).toBe(true);
+  expect(await page.evaluate(() => (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause)).toBe(false);
+
+  await page.evaluate(() => { (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause = true; });
+  await expect.poll(() => active('Pause')).toBe(true);
+  await page.mouse.click(640, 545);
+  await expect.poll(() => active('Title')).toBe(true);
+  await enterMaze();
+  await page.waitForTimeout(350);
+  expect(await active('Pause')).toBe(false);
+  expect(await active('Maze')).toBe(true);
+});
+
 test('every gameplay atlas keeps visible pixels inside guarded frame cells', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.goto('/');
@@ -193,6 +232,8 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     const walls = scene.tileViews.filter((view: any) => view.point.x === 4 && view.point.y === 3
       && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    const connectedWall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 4
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
     const floors = scene.tileViews.filter((view: any) => view.object.texture?.key === 'burrow-atlas'
       && view.object.frame?.name === 'env-0');
     scene.player.x = 3; scene.player.y = 3; scene.positionDog(0, false);
@@ -202,6 +243,9 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
       actor: scene.dog.depth,
       wall: walls[0]?.object.depth,
       wallAlpha: walls[0]?.object.alpha,
+      connectedWallAlpha: connectedWall?.object.alpha,
+      wallGroup: walls[0]?.occlusionGroup,
+      connectedWallGroup: connectedWall?.occlusionGroup,
       maximumFloorDepth: Math.max(...floors.map((view: any) => view.object.depth)),
       renderedBlockCells: walls.length
     };
@@ -209,7 +253,23 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(behind.renderedBlockCells).toBe(1);
   expect(behind.actor).toBeGreaterThan(behind.maximumFloorDepth);
   expect(behind.actor).toBeLessThan(behind.wall);
-  expect(behind.wallAlpha).toBeCloseTo(.4, 2);
+  expect(behind.wallAlpha).toBe(1);
+  expect(behind.connectedWallAlpha).toBe(1);
+  expect(behind.connectedWallGroup).toBe(behind.wallGroup);
+  const wallOcclusion = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const group = scene.wallOcclusionGroups.find((candidate: any) => candidate.id === scene.tileViews.find((view: any) =>
+      view.point.x === 4 && view.point.y === 3 && view.object.frame?.name === 'env-1').occlusionGroup);
+    return {
+      overlayVisible: scene.dogOcclusionSprite.visible,
+      overlayDepth: scene.dogOcclusionSprite.depth,
+      maximumGroupDepth: Math.max(...group.members.map((member: any) => member.object.depth)),
+      membersVisible: group.members.every((member: any) => member.object.visible)
+    };
+  });
+  expect(wallOcclusion.overlayVisible).toBe(true);
+  expect(wallOcclusion.overlayDepth).toBeGreaterThan(wallOcclusion.maximumGroupDepth);
+  expect(wallOcclusion.membersVisible).toBe(true);
   const undergroundFixture = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     const images = scene.tileViews.filter((view: any) => view.object.texture);
@@ -238,10 +298,11 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
     scene.player.x = 5; scene.player.y = 4; scene.positionDog(0, false);
     scene.updateVisibility();
     scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
-    return { actor: scene.dog.depth, wall: wall.object.depth, wallAlpha: wall.object.alpha };
+    return { actor: scene.dog.depth, wall: wall.object.depth, wallAlpha: wall.object.alpha, overlayVisible: scene.dogOcclusionSprite.visible };
   });
   expect(inFront.actor).toBeGreaterThan(inFront.wall);
   expect(inFront.wallAlpha).toBe(1);
+  expect(inFront.overlayVisible).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
 });
 

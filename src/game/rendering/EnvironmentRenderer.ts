@@ -12,6 +12,12 @@ export interface EnvironmentView {
   object: Phaser.GameObjects.Shape | Phaser.GameObjects.Image;
   discovered: boolean;
   occludesActor: boolean;
+  occlusionGroup?: string;
+}
+
+export interface EnvironmentOcclusionGroup {
+  id: string;
+  members: EnvironmentView[];
 }
 
 const BURROW_FLOOR = { a: 0x8d5d3d, b: 0x7b4c35, edge: 0x4d2d23 };
@@ -30,6 +36,7 @@ export function assetForWall(world: WorldDefinition, point: GridPoint, isBlock: 
 
 export class EnvironmentRenderer {
   private readonly views: EnvironmentView[] = [];
+  private readonly groups: EnvironmentOcclusionGroup[] = [];
 
   constructor(private readonly scene: Phaser.Scene, private readonly world: WorldDefinition) {}
 
@@ -79,12 +86,15 @@ export class EnvironmentRenderer {
     placeProjectedSprite(this.scene, level.exit, home);
   }
 
+  getOcclusionGroups(): EnvironmentOcclusionGroup[] { return this.groups; }
+
   private track(
     point: GridPoint,
     objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>,
-    occludesActor = false
+    occludesActor = false,
+    occlusionGroup?: string
   ): void {
-    objects.forEach(object => this.views.push({ point, object, discovered: false, occludesActor }));
+    objects.forEach(object => this.views.push({ point, object, discovered: false, occludesActor, occlusionGroup }));
   }
 
   private drawFloor(point: GridPoint): void {
@@ -148,28 +158,51 @@ export class EnvironmentRenderer {
   private drawWalls(): void {
     const walls = new Set<string>();
     const blocks = new Set<string>();
-    this.world.blocks.forEach(block => {
+    const wallGroups = new Map<string, string>();
+    this.world.blocks.forEach((block, index) => {
       for (let y = block.y; y < block.y + block.height; y++) {
         for (let x = block.x; x < block.x + block.width; x++) {
           const key = pointKey({ x, y }); blocks.add(key); walls.add(key);
+          wallGroups.set(key, `block-${index}`);
         }
       }
     });
     const addBoundary = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height
         || this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y)) return;
-      walls.add(pointKey({ x, y }));
+      const key = pointKey({ x, y }); walls.add(key);
+      if (!wallGroups.has(key)) wallGroups.set(key, 'boundary');
     };
     for (let y = 0; y < this.world.height; y++) for (let x = 0; x < this.world.width; x++) {
       if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
       addBoundary(x + 1, y); addBoundary(x - 1, y); addBoundary(x, y + 1); addBoundary(x, y - 1);
+    }
+    let boundaryGroup = 0;
+    const ungrouped = new Set([...walls].filter(key => wallGroups.get(key) === 'boundary'));
+    while (ungrouped.size) {
+      const first = ungrouped.values().next().value as string;
+      const queue = [first]; ungrouped.delete(first);
+      const group = `boundary-${boundaryGroup++}`;
+      while (queue.length) {
+        const current = queue.pop()!; wallGroups.set(current, group);
+        const [x, y] = current.split(',').map(Number);
+        [`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`].forEach(neighbor => {
+          if (!ungrouped.delete(neighbor)) return;
+          queue.push(neighbor);
+        });
+      }
     }
     walls.forEach(key => {
       const [x, y] = key.split(',').map(Number);
       const point = { x, y };
       const definition = ENVIRONMENT_ASSETS[assetForWall(this.world, point, blocks.has(key))];
       const image = placeProjectedSprite(this.scene, point, definition);
-      this.track(point, [image], true);
+      this.track(point, [image], true, wallGroups.get(key));
+    });
+    new Set(wallGroups.values()).forEach(groupId => {
+      const members = this.views.filter(view => view.occlusionGroup === groupId);
+      if (!members.length) return;
+      this.groups.push({ id: groupId, members });
     });
   }
 
