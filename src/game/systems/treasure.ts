@@ -13,8 +13,14 @@ function shuffled<T>(items: T[], random: RandomSource): T[] {
 }
 
 export function selectOrdinaryTreasures(discovered: string[], count = 4, random: RandomSource = Math.random): BuriedTreasureDefinition[] {
-  const newFinds = shuffled(TREASURE_CATALOG.filter(item => !discovered.includes(item.id)), random);
-  const repeats = shuffled(TREASURE_CATALOG.filter(item => discovered.includes(item.id)), random);
+  return selectTreasuresFromCatalog(TREASURE_CATALOG, discovered, count, random);
+}
+
+export function selectTreasuresFromCatalog(
+  catalog: BuriedTreasureDefinition[], discovered: string[], count = 4, random: RandomSource = Math.random
+): BuriedTreasureDefinition[] {
+  const newFinds = shuffled(catalog.filter(item => !discovered.includes(item.id)), random);
+  const repeats = shuffled(catalog.filter(item => discovered.includes(item.id)), random);
   return [...newFinds, ...repeats].slice(0, count);
 }
 
@@ -30,4 +36,17 @@ export function activateDigSpots(
   const active = spots.map((spot, index) => ({ ...spot, treasure: treasures[index], dug: false }));
   const pirate = shuffled(pirateSpots, random)[0];
   return [...active, { ...pirate, treasure: PIRATE_TREASURE, dug: false }];
+}
+
+export function activateThemedDigSpots(
+  ordinarySpots: DigSpotDefinition[], discovered: string[], catalog: BuriedTreasureDefinition[],
+  specialSpots: DigSpotDefinition[] = [], specialTreasure?: BuriedTreasureDefinition, random: RandomSource = Math.random
+): ActiveDigSpot[] {
+  if (ordinarySpots.length < 4) throw new Error('The level needs at least four ordinary dig spots.');
+  const spots = shuffled(ordinarySpots, random).slice(0, 4);
+  const treasures = selectTreasuresFromCatalog(catalog, discovered, 4, random);
+  const active = spots.map((spot, index) => ({ ...spot, treasure: treasures[index], dug: false }));
+  if (!specialTreasure) return active;
+  if (specialSpots.length < 1) throw new Error('A special treasure needs at least one eligible dig spot.');
+  return [...active, { ...shuffled(specialSpots, random)[0], treasure: specialTreasure, dug: false }];
 }

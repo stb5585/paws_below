@@ -4,6 +4,8 @@ This document combines player feedback with a code and documentation review. It 
 
 The game should remain cozy and approachable for young children: no lives, punishing timers, or hard failure states. Improvements should favor clear feedback, forgiving interactions, short play sessions, and controls that work without reading long instructions.
 
+**Implementation status (August 2026):** Release A's responsive layout, follow-touch/joystick choice, forgiving swept pickups, and platform-appropriate prompts are implemented. Recorded proximity barks, treasure-direction reveals, a persistent objective, and progress-aware navigation help from Release B are also implemented. Content work now includes a data-driven animal picker, Mochi the bunny, a collect-then-return goal, rabbit foods and pen artwork, per-animal best scores, dynamic results totals, offline caching for the new assets, and a persistent full-screen/windowed-view control. The environment-rendering overhaul and remaining roadmap work are still future work.
+
 ## Priority guide
 
 - **P0 — Foundation:** Fixes a visible usability or presentation problem and should happen before adding substantial content.

@@ -18,7 +18,7 @@ describe('player profile', () => {
     expect(sanitizeProfile({
       version: 1, bestScore: -5, collection: ['sock', 'sock', 7], pirateBadge: 1,
       muted: true, fullBrightness: false, tutorialSeen: true
-    })).toEqual({ ...DEFAULT_PROFILE, collection: ['sock'], muted: true, tutorialSeen: true });
+    })).toEqual({ ...DEFAULT_PROFILE, collection: ['sock'], muted: true, tutorialSeen: true, seenAnimals: ['white-dog'] });
   });
 
   it('persists discoveries, best score settings, and pirate badge', () => {
@@ -32,5 +32,32 @@ describe('player profile', () => {
   it('sanitizes the persistent touch-control preference', () => {
     expect(sanitizeProfile({ ...DEFAULT_PROFILE, touchControls: 'on' }).touchControls).toBe('on');
     expect(sanitizeProfile({ ...DEFAULT_PROFILE, touchControls: 'invalid' }).touchControls).toBe('auto');
+  });
+
+  it('migrates existing saves to follow-touch and preserves joystick mode', () => {
+    const oldSave = { ...DEFAULT_PROFILE } as Partial<typeof DEFAULT_PROFILE>;
+    delete oldSave.touchMovement;
+    expect(sanitizeProfile(oldSave).touchMovement).toBe('follow');
+    expect(sanitizeProfile({ ...DEFAULT_PROFILE, touchMovement: 'joystick' }).touchMovement).toBe('joystick');
+  });
+
+  it('migrates per-animal progress without losing the legacy dog score', () => {
+    const migrated = sanitizeProfile({
+      version: 1, bestScore: 720, collection: [], pirateBadge: false, muted: false,
+      fullBrightness: false, tutorialSeen: true, touchControls: 'auto'
+    });
+    expect(migrated.selectedAnimalId).toBe('white-dog');
+    expect(migrated.seenAnimals).toEqual(['white-dog']);
+    expect(migrated.bestScores).toEqual({ 'white-dog': 720, 'cream-bunny': 0 });
+
+    const bunny = sanitizeProfile({ ...DEFAULT_PROFILE, selectedAnimalId: 'cream-bunny', seenAnimals: ['cream-bunny'], bestScores: { 'cream-bunny': 350 } });
+    expect(bunny.selectedAnimalId).toBe('cream-bunny');
+    expect(bunny.bestScores['cream-bunny']).toBe(350);
+  });
+
+  it('returns independent default score records for new players', () => {
+    const empty = { getItem: () => null };
+    const first = loadProfile(empty); first.bestScores['cream-bunny'] = 999;
+    expect(loadProfile(empty).bestScores['cream-bunny']).toBe(0);
   });
 });

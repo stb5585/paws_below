@@ -55,8 +55,8 @@ const TREAT_POINTS: Array<GridPoint & { power: PowerKind }> = [
 ];
 
 export const COLLECTIBLES: CollectibleDefinition[] = [
-  ...FOOD_POINTS.map((position, index) => ({ id: `food-${index + 1}`, kind: 'food' as const, position, points: 10 })),
-  ...TREAT_POINTS.map((item, index) => ({ id: `treat-${index + 1}`, kind: 'treat' as const, position: {x:item.x,y:item.y}, points: 50, power: item.power }))
+  ...FOOD_POINTS.map((position, index) => ({ id: `food-${index + 1}`, kind: 'food' as const, position, points: 10, pickupRadius: .9 })),
+  ...TREAT_POINTS.map((item, index) => ({ id: `treat-${index + 1}`, kind: 'treat' as const, position: {x:item.x,y:item.y}, points: 50, power: item.power, pickupRadius: 1.15 }))
 ];
 
 export const ORDINARY_DIG_SPOTS: DigSpotDefinition[] = [
