@@ -28,7 +28,7 @@ export function addViewportShade(scene: Phaser.Scene, color: number, alpha: numb
   return shade;
 }
 
-export function addMenuBackground(scene: Phaser.Scene, shade = .34, texture = 'menu-burrow-v2'): Phaser.GameObjects.Image {
+export function addMenuBackground(scene: Phaser.Scene, shade = .34, texture = 'menu-burrow'): Phaser.GameObjects.Image {
   const background = scene.add.image(0, 0, texture).setScrollFactor(0).setDepth(-100);
   const overlay = scene.add.rectangle(0, 0, 1, 1, 0x170d0a, shade).setOrigin(0).setScrollFactor(0).setDepth(-99);
   bindSafeScene(scene, layout => {

@@ -23,6 +23,7 @@ describe('recorded bark selection', () => {
     const [single, treasure] = FakeAudio.instances;
     expect(single.src).toContain('one_bark');
     expect(treasure.src).toContain('three_barks');
+    expect(FakeAudio.instances.every(player => player.preload === 'none')).toBe(true);
 
     sound.bark();
     expect(single.play).toHaveBeenCalledTimes(1);

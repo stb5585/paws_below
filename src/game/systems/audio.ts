@@ -16,11 +16,11 @@ export class Soundscape {
     if (typeof Audio === 'undefined') return;
     const single = new Audio(oneBarkUrl);
     const treasure = new Audio(threeBarksUrl);
-    single.preload = 'auto'; treasure.preload = 'auto';
+    single.preload = 'none'; treasure.preload = 'none';
     this.barkPlayers.set('single', single); this.barkPlayers.set('treasure', treasure);
     const singleHonk = new Audio(oneHonkUrl);
     const treasureHonks = new Audio(threeHonksUrl);
-    singleHonk.preload = 'auto'; treasureHonks.preload = 'auto';
+    singleHonk.preload = 'none'; treasureHonks.preload = 'none';
     this.honkPlayers.set('single', singleHonk); this.honkPlayers.set('treasure', treasureHonks);
   }
 

@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ANIMALS, BUNNY, DOG, getAnimal, getLevelForAnimal } from '../src/game/data/content';
 
@@ -20,12 +20,17 @@ describe('playable animals', () => {
   });
 
   it('ships the generated bunny and rabbit atlas assets', () => {
-    expect(existsSync('public/assets/bunny-animations-v3.png')).toBe(true);
-    expect(existsSync('public/assets/pip-animations-v3.png')).toBe(true);
-    expect(existsSync('public/assets/rabbit-atlas-v3.png')).toBe(true);
-    expect(existsSync('public/assets/farm-atlas-v3.png')).toBe(true);
-    expect(existsSync('public/assets/farm-treasures-v3.png')).toBe(true);
-    expect(existsSync('public/assets/household-treasures-v4.png')).toBe(true);
-    expect(existsSync('public/assets/burrow-atlas-v4.png')).toBe(true);
+    expect(existsSync('public/assets/bunny-animations.webp')).toBe(true);
+    expect(existsSync('public/assets/pip-animations.webp')).toBe(true);
+    expect(existsSync('public/assets/rabbit-atlas.webp')).toBe(true);
+    expect(existsSync('public/assets/farm-atlas.webp')).toBe(true);
+    expect(existsSync('public/assets/farm-treasures.webp')).toBe(true);
+    expect(existsSync('public/assets/household-treasures.webp')).toBe(true);
+    expect(existsSync('public/assets/burrow-atlas.webp')).toBe(true);
+  });
+
+  it('keeps one canonical file instead of checked-in numbered asset revisions', () => {
+    const numberedAssets = readdirSync('public/assets').filter(name => /-v\d+\.(?:png|webp|avif)$/i.test(name));
+    expect(numberedAssets).toEqual([]);
   });
 });

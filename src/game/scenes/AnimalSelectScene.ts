@@ -4,11 +4,15 @@ import type { Soundscape } from '../systems/audio';
 import type { PlayerProfile } from '../systems/profile';
 import { animalBestScore, saveProfile } from '../systems/profile';
 import { addMenuBackground, addPanel, createButton, heading } from '../ui';
+import { queueAnimalPortraits, registerLoadedAssets } from '../systems/assets';
 
 export class AnimalSelectScene extends Phaser.Scene {
   constructor() { super('AnimalSelect'); }
 
+  preload(): void { queueAnimalPortraits(this); }
+
   create(): void {
+    registerLoadedAssets(this);
     addMenuBackground(this, .48);
     heading(this, 640, 68, 'CHOOSE YOUR ANIMAL', 52);
     this.add.text(640, 116, 'Each friend has a different adventure!', {

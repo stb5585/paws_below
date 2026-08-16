@@ -38,6 +38,31 @@ export async function requestAppInstall(): Promise<'accepted' | 'dismissed' | 'i
 export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return;
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL });
+    void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL }).then(registration => {
+      let refreshRequested = false;
+      const showUpdate = () => {
+        const notice = document.querySelector<HTMLElement>('#update-message');
+        const button = document.querySelector<HTMLButtonElement>('#update-button');
+        if (!notice || !button || !registration.waiting || !navigator.serviceWorker.controller) return;
+        notice.hidden = false;
+        button.onclick = () => {
+          button.disabled = true;
+          refreshRequested = true;
+          registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+        };
+      };
+      showUpdate();
+      registration.addEventListener('updatefound', () => {
+        registration.installing?.addEventListener('statechange', event => {
+          if ((event.target as ServiceWorker).state === 'installed') showUpdate();
+        });
+      });
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshRequested || refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+    });
   });
 }

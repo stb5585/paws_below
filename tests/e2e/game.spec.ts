@@ -19,8 +19,8 @@ test('title, tutorial, and maze render without browser errors', async ({ page },
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
   const viewport = page.viewportSize();
-  expect(box!.width).toBeLessThanOrEqual(viewport!.width);
-  expect(box!.height).toBeLessThanOrEqual(viewport!.height);
+  expect(Math.abs(box!.width - viewport!.width)).toBeLessThan(2);
+  expect(Math.abs(box!.height - viewport!.height)).toBeLessThan(2);
   const scaleX = box!.width / 1280;
   const scaleY = box!.height / 720;
   await page.mouse.click(box!.x + 640 * scaleX, box!.y + 290 * scaleY);
@@ -139,13 +139,13 @@ test('every gameplay atlas keeps visible pixels inside guarded frame cells', asy
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.goto('/');
   const specs = [
-    { asset: 'pip-animations-v3.png', columns: 4, rows: 4, minimum: 22 },
-    { asset: 'bunny-animations-v3.png', columns: 4, rows: 4, minimum: 40 },
-    { asset: 'farm-atlas-v3.png', columns: 4, rows: 4, minimum: 10, edgeToEdge: [0] },
-    { asset: 'rabbit-atlas-v3.png', columns: 4, rows: 2, minimum: 14 },
-    { asset: 'farm-treasures-v3.png', columns: 4, rows: 2, minimum: 14 },
-    { asset: 'household-treasures-v4.png', columns: 4, rows: 2, minimum: 14 },
-    { asset: 'burrow-atlas-v4.png', columns: 4, rows: 4, minimum: 10, edgeToEdge: [0, 2] }
+    { asset: 'pip-animations.webp', columns: 4, rows: 4, minimum: 22 },
+    { asset: 'bunny-animations.webp', columns: 4, rows: 4, minimum: 40 },
+    { asset: 'farm-atlas.webp', columns: 4, rows: 4, minimum: 10, edgeToEdge: [0] },
+    { asset: 'rabbit-atlas.webp', columns: 4, rows: 2, minimum: 14 },
+    { asset: 'farm-treasures.webp', columns: 4, rows: 2, minimum: 14 },
+    { asset: 'household-treasures.webp', columns: 4, rows: 2, minimum: 14 },
+    { asset: 'burrow-atlas.webp', columns: 4, rows: 4, minimum: 10, edgeToEdge: [0, 2] }
   ];
   const results = await page.evaluate(async atlasSpecs => Promise.all(atlasSpecs.map(async spec => {
     const image = new Image(); image.src = `assets/${spec.asset}`; await image.decode();
@@ -172,6 +172,44 @@ test('every gameplay atlas keeps visible pixels inside guarded frame cells', asy
   }
 });
 
+test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'farm', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:farm'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
+  })));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  const bootTextures = await page.evaluate(() => {
+    const textures = (window as any).__PAWS_GAME__.textures;
+    return {
+      title: textures.exists('title-animals'), pip: textures.exists('pip-animations'),
+      farm: textures.exists('farm-atlas'), burrow: textures.exists('burrow-atlas')
+    };
+  });
+  expect(bootTextures).toEqual({ title: true, pip: false, farm: false, burrow: false });
+
+  await page.mouse.click(640, 270);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('AnimalSelect'))).toBe(true);
+  const selectionTextures = await page.evaluate(() => {
+    const textures = (window as any).__PAWS_GAME__.textures;
+    return { pip: textures.exists('pip-animations'), bunny: textures.exists('bunny-animations'), farm: textures.exists('farm-atlas'), burrow: textures.exists('burrow-atlas') };
+  });
+  expect(selectionTextures).toEqual({ pip: true, bunny: true, farm: false, burrow: false });
+
+  await page.mouse.click(390, 530);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('MapSelect'))).toBe(true);
+  await page.mouse.click(890, 535);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Maze')), { timeout: 30_000 }).toBe(true);
+  const gameTextures = await page.evaluate(() => {
+    const textures = (window as any).__PAWS_GAME__.textures;
+    return { farm: textures.exists('farm-atlas'), farmTreasures: textures.exists('farm-treasures'), burrow: textures.exists('burrow-atlas') };
+  });
+  expect(gameTextures).toEqual({ farm: true, farmTreasures: true, burrow: false });
+});
+
 test('animal selection flows through map selection with corrected bunny artwork', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
@@ -183,7 +221,7 @@ test('animal selection flows through map selection with corrected bunny artwork'
   await page.goto('/');
   const atlas = await page.evaluate(async () => {
     const image = new Image();
-    image.src = 'assets/bunny-animations-v3.png';
+    image.src = 'assets/bunny-animations.webp';
     await image.decode();
     const canvas = document.createElement('canvas');
     canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
@@ -223,7 +261,7 @@ test('animal selection flows through map selection with corrected bunny artwork'
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     return { animal: scene.animal.id, goal: scene.level.goal.type, texture: scene.dogSprite.texture.key };
   });
-  expect(bunny).toEqual({ animal: 'cream-bunny', goal: 'reachExit', texture: 'bunny-animations-v3' });
+  expect(bunny).toEqual({ animal: 'cream-bunny', goal: 'reachExit', texture: 'bunny-animations' });
   await page.evaluate(() => {
     const sprite = (window as any).__PAWS_GAME__.scene.getScene('Maze').dogSprite;
     sprite.stop(); sprite.setFrame('bunny-10');
@@ -257,7 +295,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
 });
 
 test('canvas expands across common landscape and tablet aspect ratios', async ({ page }, testInfo) => {
-  test.skip(!['wide-19-5', 'wide-20-9', 'tablet-4-3'].includes(testInfo.project.name));
+  test.skip(!['mobile-landscape', 'wide-19-5', 'wide-20-9', 'tablet-4-3'].includes(testInfo.project.name));
   await page.goto('/');
   const canvas = page.locator('canvas');
   await expect(canvas).toBeVisible();
@@ -283,6 +321,27 @@ test('web app manifest is installable and scoped for repository hosting', async 
   const manifest = await response.json();
   expect(manifest.display).toBe('standalone');
   expect(manifest.start_url).toBe('./');
+});
+
+test('production service worker serves navigation offline without returning HTML for assets', async ({ page, context }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium' || process.env.PAWS_PWA_TEST !== '1');
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => navigator.serviceWorker?.controller?.scriptURL ?? ''), { timeout: 30_000 }).toContain('sw.js');
+  await page.reload();
+  await expect(page.locator('canvas')).toBeVisible();
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.locator('canvas')).toBeVisible();
+  const missingAsset = await page.evaluate(async () => {
+    try {
+      const response = await fetch('assets/not-a-real-sprite.png');
+      return { rejected: false, status: response.status, type: response.type, contentType: response.headers.get('content-type') };
+    } catch {
+      return { rejected: true };
+    }
+  });
+  expect(missingAsset).toEqual({ rejected: true });
+  await context.setOffline(false);
 });
 
 test('portrait touch devices receive a rotate prompt', async ({ page }, testInfo) => {
