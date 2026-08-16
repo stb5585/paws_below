@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
-import { diamondPoints, projectGridPoint, WorldLayer, worldDepth } from '../systems/rendering';
+import { diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
   ENVIRONMENT_ASSETS, placeProjectedSprite,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
@@ -62,7 +62,7 @@ export class EnvironmentRenderer {
   renderHome(level: LevelDefinition, animal: AnimalDefinition): void {
     const position = projectGridPoint(level.exit);
     const glow = this.scene.add.circle(position.x, position.y - 64, 96, 0xffc45f, .2)
-      .setDepth(worldDepth(position.y, WorldLayer.groundDetail));
+      .setDepth(GroundDepth.detail);
     this.scene.tweens.add({
       targets: glow, scale: { from: .85, to: 1.15 }, alpha: { from: .12, to: .25 },
       duration: 1200, yoyo: true, repeat: -1
@@ -88,25 +88,25 @@ export class EnvironmentRenderer {
     if (this.world.theme === 'farm') {
       const color = FARM_GRASS[Math.abs(point.x * 7 + point.y * 11) % FARM_GRASS.length];
       const base = this.scene.add.polygon(position.x, position.y, polygon, color, 1)
-        .setStrokeStyle(1, 0x41682f, .24).setDepth(worldDepth(position.y, WorldLayer.ground));
+        .setStrokeStyle(1, 0x41682f, .24).setDepth(GroundDepth.base);
       const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
-        layer: WorldLayer.groundDetail, alpha: .72
+        depth: GroundDepth.detail, alpha: .72
       });
       this.track(point, base, texture);
       return;
     }
     const color = (point.x + point.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
     const base = this.scene.add.polygon(position.x, position.y, polygon, color, 1)
-      .setStrokeStyle(1, BURROW_FLOOR.edge, .45).setDepth(worldDepth(position.y, WorldLayer.ground));
+      .setStrokeStyle(1, BURROW_FLOOR.edge, .45).setDepth(GroundDepth.base);
     const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
-      layer: WorldLayer.groundDetail
+      depth: GroundDepth.detail
     });
     this.track(point, base, texture);
   }
 
   private drawLava(point: GridPoint): Phaser.GameObjects.Graphics {
     const position = projectGridPoint(point);
-    const layer = this.scene.add.graphics().setDepth(worldDepth(position.y, WorldLayer.groundDetail));
+    const layer = this.scene.add.graphics().setDepth(GroundDepth.detail);
     const diamond = (halfWidth: number, halfHeight: number) => [
       new Phaser.Geom.Point(position.x, position.y - halfHeight),
       new Phaser.Geom.Point(position.x + halfWidth, position.y),
@@ -136,7 +136,7 @@ export class EnvironmentRenderer {
     const pathIndex = this.world.jumpPaths.findIndex(path => path.some(candidate => pointKey(candidate) === pointKey(point)));
     const choices = this.world.rendering.crossingAssets;
     const definition = ENVIRONMENT_ASSETS[choices[Math.max(0, pathIndex) % choices.length]];
-    const image = placeProjectedSprite(this.scene, point, definition);
+    const image = placeProjectedSprite(this.scene, point, definition, { depth: GroundDepth.detail });
     this.track(point, image);
   }
 

@@ -1,9 +1,11 @@
 import type { GridPoint } from '../types';
 
 /**
- * Isometric objects are sorted by the screen-space Y coordinate where they
- * touch the ground. Layer offsets only resolve ties at the same contact point;
- * they must never be large enough to overtake an object on a lower row.
+ * Isometric objects above the ground are sorted by the screen-space Y
+ * coordinate where they touch it. Layer offsets only resolve ties at the same
+ * contact point; they must never be large enough to overtake an object on a
+ * lower row. Floor surfaces use GroundDepth instead so they can never occlude
+ * an actor farther up the screen.
  */
 export const WORLD_DEPTH_STRIDE = 100;
 
@@ -36,12 +38,15 @@ export function diamondPoints(projection: IsometricProjection = GAME_PROJECTION)
 }
 
 export const WorldLayer = {
-  ground: 0,
-  groundDetail: 10,
   prop: 30,
   interactive: 40,
   actor: 50,
   effect: 90
+} as const;
+
+export const GroundDepth = {
+  base: 0,
+  detail: 10
 } as const;
 
 export const UiDepth = {
@@ -57,6 +62,6 @@ export const UiDepth = {
 
 export type WorldLayerOffset = typeof WorldLayer[keyof typeof WorldLayer];
 
-export function worldDepth(groundY: number, layer: WorldLayerOffset = WorldLayer.ground): number {
+export function worldDepth(groundY: number, layer: WorldLayerOffset = WorldLayer.prop): number {
   return Math.round(groundY * WORLD_DEPTH_STRIDE) + layer;
 }

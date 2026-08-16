@@ -1,22 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GAME_PROJECTION, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
+  GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
   diamondPoints, projectGridPoint, worldDepth
 } from '../src/game/systems/rendering';
 import { ENVIRONMENT_ASSETS } from '../src/game/rendering/catalog';
 
 describe('isometric rendering order', () => {
-  it('sorts objects primarily by their ground-contact y coordinate', () => {
-    const actorOnHigherRow = worldDepth(240, WorldLayer.actor);
-    const floorOnePixelLower = worldDepth(241, WorldLayer.ground);
-    expect(actorOnHigherRow).toBeLessThan(floorOnePixelLower);
+  it('keeps the complete floor below y-sorted actors', () => {
+    const actorAtHighestSupportedWorldPoint = worldDepth(GAME_PROJECTION.origin.y, WorldLayer.actor);
+    expect(GroundDepth.base).toBeLessThan(GroundDepth.detail);
+    expect(GroundDepth.detail).toBeLessThan(actorAtHighestSupportedWorldPoint);
   });
 
   it('uses layers only to break ties at the same contact point', () => {
     const groundY = 320;
     const depths = [
-      WorldLayer.ground,
-      WorldLayer.groundDetail,
       WorldLayer.prop,
       WorldLayer.interactive,
       WorldLayer.actor,

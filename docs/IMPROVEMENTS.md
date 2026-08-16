@@ -55,7 +55,7 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 
 **First implementation package completed**
 
-- Added shared ground-contact depth helpers and named world/UI layers.
+- Added shared ground-contact depth helpers and named ground, world, and UI layers; floor surfaces remain below every actor while walls and props sort by ground contact.
 - Actors now change depth from their ground position rather than using a fixed depth.
 - Walls, stepping stones, collectibles, effects, decor, and exit elements use the same ordering model.
 - Removed duplicate rendering of blocked underground cells.

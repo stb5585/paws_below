@@ -63,6 +63,7 @@ export const ENVIRONMENT_ASSETS: Readonly<Record<EnvironmentAssetId, ProjectedSp
 export interface SpritePlacementOptions {
   size?: number;
   layer?: WorldLayerOffset;
+  depth?: number;
   alpha?: number;
 }
 
@@ -99,7 +100,7 @@ export function placeProjectedSprite(
   const image = scene.add.image(position.x, position.y, definition.texture, definition.frame)
     .setOrigin(definition.groundAnchor.x, definition.groundAnchor.y)
     .setDisplaySize(size, size)
-    .setDepth(worldDepth(position.y, options.layer ?? WorldLayer.prop));
+    .setDepth(options.depth ?? worldDepth(position.y, options.layer ?? WorldLayer.prop));
   if (options.alpha !== undefined) image.setAlpha(options.alpha);
   return image;
 }
