@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Open the local address printed by Vite. The game expands to fill modern landscape screens while keeping menus and controls in a centered safe area, and prompts touch players to rotate portrait devices.
+Open the local address printed by Vite. The game expands to the actual dynamic viewport without forcing desktop minimum dimensions onto phones, keeps menus and controls in a centered safe area, and prompts touch players to rotate portrait devices.
 
 ## Install on Android from GitHub
 
@@ -20,7 +20,7 @@ The repository includes an offline-capable Progressive Web App and a GitHub Page
 3. Wait for the **Deploy Paws Below to GitHub Pages** workflow to finish.
 4. Open the Pages address on Android using Chrome and tap **Install App** on the title screen. If Chrome does not offer the prompt yet, use **⋮ → Add to Home screen**.
 
-The installed game launches in landscape standalone mode and caches its game assets after the first successful load. A raw Git repository URL cannot itself run an Android app; the included Pages workflow turns that repository into the secure website Android installs.
+The installed game launches in landscape standalone mode. Its small menu shell is cached during installation, while the chosen animal and map are cached on demand. Offline navigation uses the cached application without disguising missing images or scripts as HTML, and a notice lets the player accept a ready update safely. A raw Git repository URL cannot itself run an Android app; the included Pages workflow turns that repository into the secure website Android installs.
 
 ## Controls
 
@@ -51,19 +51,20 @@ See [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) for the prioritized game, mob
 
 - `src/game/data` contains reusable animal, level, collectible, power, map, and treasure definitions.
 - `src/game/systems` contains persistence, scoring, sound, and treasure-selection logic.
+- `src/game/systems/assets.ts` owns deferred animal/map loading and shared atlas registration.
 - `src/game/scenes` contains the title, animal selection, map selection, tutorial, maze, pause, return-home, collection, and results flows.
 - `public/assets/burrow-map.json` is the isometric Tiled map metadata.
-- `public/assets/title-burrow.png` is the original generated storybook title artwork.
-- `public/assets/pip-animations-v3.png` contains Pip's transparent, safely padded run, dig, jump, bark, and idle animation frames.
-- `public/assets/title-animals-v1.png` is the two-animal burrow-and-farm title artwork.
-- `public/assets/bunny-animations-v3.png` contains transparent, individually repacked run, dig, jump, honk, and idle frames with guarded edges that prevent sprite wrapping.
-- `public/assets/rabbit-atlas-v3.png` contains alpha-cleaned rabbit objects repacked inside guarded frame cells.
-- `public/assets/burrow-atlas-v4.png` contains the transparent isometric environment and collectible sprites in guarded frame cells.
-- `public/assets/household-treasures-v4.png` contains eight transparent, guarded buried-item sprites.
-- `public/assets/farm-atlas-v3.png` contains guarded grass, corn, barn, complete tractor, hay, fence, foods, treats, and farm landmarks.
-- `public/assets/farm-treasures-v3.png` contains eight transparent, guarded farm-find sprites with open handles and gaps.
-- `public/assets/paws-icon-v2-1024.png` is the detailed Pip-and-Mochi launcher icon source, with 192px and 512px PWA variants.
-- `public/assets/menu-burrow-v2.png` is the polished storybook background shared by the tutorial, collection, return-home, and results screens.
+- `public/assets/title-burrow.webp` is the original generated storybook title artwork.
+- `public/assets/pip-animations.webp` contains Pip's transparent, safely padded run, dig, jump, bark, and idle animation frames.
+- `public/assets/title-animals.webp` is the two-animal burrow-and-farm title artwork.
+- `public/assets/bunny-animations.webp` contains transparent, individually repacked run, dig, jump, honk, and idle frames with guarded edges that prevent sprite wrapping.
+- `public/assets/rabbit-atlas.webp` contains alpha-cleaned rabbit objects repacked inside guarded frame cells.
+- `public/assets/burrow-atlas.webp` contains the transparent isometric environment and collectible sprites in guarded frame cells.
+- `public/assets/household-treasures.webp` contains eight transparent, guarded buried-item sprites.
+- `public/assets/farm-atlas.webp` contains guarded grass, corn, barn, complete tractor, hay, fence, foods, treats, and farm landmarks.
+- `public/assets/farm-treasures.webp` contains eight transparent, guarded farm-find sprites with open handles and gaps.
+- `public/assets/paws-icon-1024.png` is the detailed Pip-and-Mochi launcher icon source, with 192px and 512px PWA variants.
+- `public/assets/menu-burrow.webp` is the polished storybook background shared by the tutorial, collection, return-home, and results screens.
 - `public/manifest.webmanifest` and `public/sw.js` make the built game installable and available offline after its first load.
 
 Progress is stored only in the browser using the versioned `paws-below-profile-v1` local-storage record. There are no accounts, analytics, or network services.

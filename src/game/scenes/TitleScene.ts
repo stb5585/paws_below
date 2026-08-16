@@ -9,7 +9,7 @@ export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
 
   create(): void {
-    addMenuBackground(this, .22, 'title-animals-v1');
+    addMenuBackground(this, .22, 'title-animals');
     this.add.rectangle(640, 180, 920, 300, 0x1b100d, .52).setStrokeStyle(3, 0xffdda0, .25);
     heading(this, 640, 107, 'PAWS BELOW', 82);
     this.add.text(640, 178, 'Choose an animal. Pick an adventure.', {
@@ -71,6 +71,6 @@ export class TitleScene extends Phaser.Scene {
       (light.getAt(2) as Phaser.GameObjects.Text).setText(`☀️  ${profile.fullBrightness ? 'BRIGHT' : 'COZY LIGHT'}`);
     }, { width: 220, height: 44, fontSize: 18, icon: '☀️', color: 0x6a4a38 });
 
-    this.add.text(1238, 688, 'v1.3', { fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#fff1ca99' }).setOrigin(1);
+    this.add.text(1238, 688, 'v1.3.1', { fontFamily: 'Fredoka, sans-serif', fontSize: '16px', color: '#fff1ca99' }).setOrigin(1);
   }
 }

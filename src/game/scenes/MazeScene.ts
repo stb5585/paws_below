@@ -163,7 +163,7 @@ export class MazeScene extends Phaser.Scene {
           const color = (x + y) % 2 ? COLORS.floorA : COLORS.floorB;
           const base = this.add.polygon(world.x, world.y, [0,-TILE_H/2,TILE_W/2,0,0,TILE_H/2,-TILE_W/2,0], color, 1)
             .setStrokeStyle(1, COLORS.floorEdge, .45).setDepth(world.y);
-          const diamond = this.add.image(world.x, world.y - 4, 'burrow-atlas-v4', 'env-0')
+          const diamond = this.add.image(world.x, world.y - 4, 'burrow-atlas', 'env-0')
             .setDisplaySize(112, 112).setDepth(world.y + 1);
           this.tileViews.push({ point, object: base, discovered: false }, { point, object: diamond, discovered: false });
         }
@@ -179,7 +179,7 @@ export class MazeScene extends Phaser.Scene {
     const color = grassColors[Math.abs(point.x * 7 + point.y * 11) % grassColors.length];
     const base = this.add.polygon(world.x, world.y, [0,-TILE_H/2,TILE_W/2,0,0,TILE_H/2,-TILE_W/2,0], color, 1)
       .setStrokeStyle(1, 0x41682f, .24).setDepth(world.y);
-    const grass = this.add.image(world.x, world.y - 4, 'farm-atlas-v3', 'farm-0').setDisplaySize(110,110).setAlpha(.72).setDepth(world.y + 1);
+    const grass = this.add.image(world.x, world.y - 4, 'farm-atlas', 'farm-0').setDisplaySize(110,110).setAlpha(.72).setDepth(world.y + 1);
     this.tileViews.push({point,object:base,discovered:false},{point,object:grass,discovered:false});
   }
 
@@ -222,7 +222,7 @@ export class MazeScene extends Phaser.Scene {
     // covering the rock sprite while still keeping Puppy above it.
     const farmObstacle = this.world.theme === 'farm';
     const pathIndex = this.world.jumpPaths.findIndex(path => path.some(node => node.x === point.x && node.y === point.y));
-    const stone = this.add.image(world.x, world.y - (farmObstacle ? 15 : 9), farmObstacle ? 'farm-atlas-v3' : 'burrow-atlas-v4', farmObstacle ? `farm-${pathIndex % 2 ? 5 : 4}` : 'env-3')
+    const stone = this.add.image(world.x, world.y - (farmObstacle ? 15 : 9), farmObstacle ? 'farm-atlas' : 'burrow-atlas', farmObstacle ? `farm-${pathIndex % 2 ? 5 : 4}` : 'env-3')
       .setDisplaySize(farmObstacle ? 76 : 80, farmObstacle ? 76 : 80)
       .setDepth(6500);
     this.tileViews.push({ point, object: stone, discovered: false });
@@ -244,7 +244,7 @@ export class MazeScene extends Phaser.Scene {
       const farmFrame = landmark ? 3 : farmVariation === 0 ? 5 : farmVariation === 8 ? 13 : 1;
       const farmSize = landmark ? 138 : farmFrame === 5 ? 108 : 118;
       const farmLift = landmark ? 43 : farmFrame === 5 ? 20 : 31;
-      const wall = this.add.image(world.x, world.y - farmLift, this.world.theme === 'farm' ? 'farm-atlas-v3' : 'burrow-atlas-v4', this.world.theme === 'farm' ? `farm-${farmFrame}` : 'env-1')
+      const wall = this.add.image(world.x, world.y - farmLift, this.world.theme === 'farm' ? 'farm-atlas' : 'burrow-atlas', this.world.theme === 'farm' ? `farm-${farmFrame}` : 'env-1')
         .setDisplaySize(farmSize, farmSize).setDepth(world.y + (landmark ? 80 : 21));
       this.tileViews.push({ point: {x,y}, object: wall, discovered: false });
     });
@@ -252,14 +252,14 @@ export class MazeScene extends Phaser.Scene {
       if (this.world.theme === 'farm') {
         for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
           const point={x,y};const p=gridToWorld(point);
-          const corn=this.add.image(p.x,p.y-31,'farm-atlas-v3','farm-1').setDisplaySize(118,118).setDepth(p.y+25);
+          const corn=this.add.image(p.x,p.y-31,'farm-atlas','farm-1').setDisplaySize(118,118).setDepth(p.y+25);
           this.tileViews.push({point,object:corn,discovered:false});
         }
         return;
       }
       const point = {x:block.x + block.width / 2, y:block.y + block.height / 2};
       const p = gridToWorld(point);
-      const rock = this.add.image(p.x, p.y - 38, 'burrow-atlas-v4', 'env-1')
+      const rock = this.add.image(p.x, p.y - 38, 'burrow-atlas', 'env-1')
         .setDisplaySize(Math.max(118, block.width * 78), Math.max(118, block.height * 84)).setDepth(p.y + 25);
       this.tileViews.push({ point, object: rock, discovered: false });
     });
@@ -274,7 +274,7 @@ export class MazeScene extends Phaser.Scene {
       ];
       decor.forEach(item => {
         const world = gridToWorld(item);
-        const image = this.add.image(world.x,world.y-item.size*.42,'farm-atlas-v3',`farm-${item.frame}`).setDisplaySize(item.size,item.size).setDepth(world.y+30);
+        const image = this.add.image(world.x,world.y-item.size*.42,'farm-atlas',`farm-${item.frame}`).setDisplaySize(item.size,item.size).setDepth(world.y+30);
         this.tileViews.push({point:item,object:image,discovered:false});
       });
       return;
@@ -287,7 +287,7 @@ export class MazeScene extends Phaser.Scene {
     ];
     decor.forEach(item => {
       const world = gridToWorld(item);
-      const image = this.add.image(world.x, world.y - item.size * .42, 'burrow-atlas-v4', `env-${item.frame}`)
+      const image = this.add.image(world.x, world.y - item.size * .42, 'burrow-atlas', `env-${item.frame}`)
         .setDisplaySize(item.size, item.size).setDepth(world.y + 30);
       if (item.frame === 5 || item.frame === 6 || item.frame === 15) {
         this.tweens.add({targets:image,alpha:{from:.82,to:1},scaleX:{from:image.scaleX*.96,to:image.scaleX*1.04},scaleY:{from:image.scaleY*.96,to:image.scaleY*1.04},duration:1100+item.x*17,yoyo:true,repeat:-1});
@@ -301,7 +301,7 @@ export class MazeScene extends Phaser.Scene {
       const shadow = this.add.ellipse(0, 13, 38, 14, 0x1b100c, .5);
       const rabbitFrame = definition.kind === 'food' ? 1 + index % 4 : definition.power === 'zoomie' ? 5 : definition.power === 'glow' ? 6 : 7;
       const dogFrame = definition.kind === 'food' ? 8 : definition.power === 'zoomie' ? 9 : definition.power === 'glow' ? 10 : 11;
-      const texture = this.world.theme === 'farm' ? 'farm-atlas-v3' : this.animal.id === 'cream-bunny' ? 'rabbit-atlas-v3' : 'burrow-atlas-v4';
+      const texture = this.world.theme === 'farm' ? 'farm-atlas' : this.animal.id === 'cream-bunny' ? 'rabbit-atlas' : 'burrow-atlas';
       const farmFrame = definition.kind === 'food' ? (this.animal.id === 'cream-bunny' ? 9 : 8) : definition.power === 'zoomie' ? 10 : definition.power === 'glow' ? 11 : 12;
       const frame = this.world.theme === 'farm' ? `farm-${farmFrame}` : this.animal.id === 'cream-bunny' ? `rabbit-${rabbitFrame}` : `env-${dogFrame}`;
       const icon = this.add.image(0, -5, texture, frame).setDisplaySize(definition.kind === 'food' ? 48 : 57, definition.kind === 'food' ? 48 : 57);
@@ -318,7 +318,7 @@ export class MazeScene extends Phaser.Scene {
     );
     active.forEach(spot => {
       const world = gridToWorld(spot);
-      const mound = this.add.image(0, -7, this.world.theme === 'farm' ? 'farm-atlas-v3' : 'burrow-atlas-v4', this.world.theme === 'farm' ? 'farm-6' : 'env-12').setDisplaySize(74,74);
+      const mound = this.add.image(0, -7, this.world.theme === 'farm' ? 'farm-atlas' : 'burrow-atlas', this.world.theme === 'farm' ? 'farm-6' : 'env-12').setDisplaySize(74,74);
       const glint = this.add.text(0, -32, '✦', { fontSize: '20px', color: '#ffd978', stroke:'#5e351c', strokeThickness:3 }).setOrigin(.5).setAlpha(.6);
       const object = this.add.container(world.x, world.y + 1, [mound, glint]).setDepth(world.y + 32);
       this.tweens.add({ targets: glint, alpha: {from:.25,to:.9}, scale: {from:.8,to:1.2}, duration: 900, yoyo: true, repeat: -1 });
@@ -330,7 +330,7 @@ export class MazeScene extends Phaser.Scene {
     const world = gridToWorld(this.level.exit);
     const glow = this.add.circle(world.x, world.y - 64, 96, 0xffc45f, .2).setDepth(world.y + 20);
     this.tweens.add({ targets: glow, scale: {from:.85,to:1.15}, alpha:{from:.12,to:.25}, duration:1200,yoyo:true,repeat:-1 });
-    this.add.image(world.x, world.y - 66, this.world.theme === 'farm' ? 'farm-atlas-v3' : this.animal.homeTexture, this.world.theme === 'farm' ? 'farm-2' : this.animal.homeFrame)
+    this.add.image(world.x, world.y - 66, this.world.theme === 'farm' ? 'farm-atlas' : this.animal.homeTexture, this.world.theme === 'farm' ? 'farm-2' : this.animal.homeFrame)
       .setDisplaySize(this.world.theme === 'farm' ? 220 : 190, this.world.theme === 'farm' ? 220 : 190).setDepth(world.y + 80);
   }
 
@@ -622,8 +622,8 @@ export class MazeScene extends Phaser.Scene {
     const card=this.add.container(world.x,world.y-90).setDepth(9000);
     const bg=this.add.rectangle(0,0,260,86,spot.treasure.kind==='pirate'?0x705023:0x342019,.95).setStrokeStyle(4,spot.treasure.kind==='pirate'?0xffdc61:0x82dfc4);
     const reward = spot.treasure.kind === 'pirate'
-      ? this.add.image(-91, 0, 'burrow-atlas-v4', 'env-14').setDisplaySize(72,72)
-      : this.add.image(-91, 0, this.world.theme === 'farm' ? 'farm-treasures-v3' : 'household-treasures-v4', this.world.theme === 'farm' ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[spot.treasure.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[spot.treasure.id]}`).setDisplaySize(72,80);
+      ? this.add.image(-91, 0, 'burrow-atlas', 'env-14').setDisplaySize(72,72)
+      : this.add.image(-91, 0, this.world.theme === 'farm' ? 'farm-treasures' : 'household-treasures', this.world.theme === 'farm' ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[spot.treasure.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[spot.treasure.id]}`).setDisplaySize(72,80);
     const text=this.add.text(28,0,`${spot.treasure.name}\n+${spot.treasure.points}`,{fontFamily:'Fredoka, sans-serif',fontSize:'20px',color:'#fff1ca',align:'center',fontStyle:'bold'}).setOrigin(.5);
     card.add([bg,reward,text]); card.setScale(.6); card.setAlpha(0);
     this.tweens.add({targets:card,scale:1,alpha:1,y:world.y-130,duration:380,ease:'Back.out',hold:1500,yoyo:true,onComplete:()=>card.destroy()});

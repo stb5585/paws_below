@@ -29,8 +29,8 @@ export class OwnerReturnScene extends Phaser.Scene {
       const firstX = 640 - (results.treasures.length - 1) * gap / 2;
       results.treasures.forEach((item, index) => {
         const reward = item.kind === 'pirate'
-          ? this.add.image(firstX + index * gap, 500, 'burrow-atlas-v4', 'env-14').setDisplaySize(74, 74)
-          : this.add.image(firstX + index * gap, 500, farm ? 'farm-treasures-v3' : 'household-treasures-v4', farm ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[item.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`).setDisplaySize(68, 84);
+          ? this.add.image(firstX + index * gap, 500, 'burrow-atlas', 'env-14').setDisplaySize(74, 74)
+          : this.add.image(firstX + index * gap, 500, farm ? 'farm-treasures' : 'household-treasures', farm ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[item.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`).setDisplaySize(68, 84);
         reward.setAngle((index % 2 ? 1 : -1) * 3);
       });
     }

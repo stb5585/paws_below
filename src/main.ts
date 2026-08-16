@@ -10,6 +10,7 @@ import { CollectionScene } from './game/scenes/CollectionScene';
 import { ResultsScene } from './game/scenes/ResultsScene';
 import { AnimalSelectScene } from './game/scenes/AnimalSelectScene';
 import { MapSelectScene } from './game/scenes/MapSelectScene';
+import { GameLoadScene } from './game/scenes/GameLoadScene';
 import { registerServiceWorker } from './pwa';
 
 const game = new Phaser.Game({
@@ -21,12 +22,10 @@ const game = new Phaser.Game({
   render: { antialias: true, pixelArt: false, roundPixels: false },
   scale: {
     mode: Phaser.Scale.EXPAND,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
-    min: { width: 1280, height: 720 },
-    max: { width: 1920, height: 1080 }
+    autoCenter: Phaser.Scale.CENTER_BOTH
   },
   input: { activePointers: 3 },
-  scene: [BootScene, TitleScene, AnimalSelectScene, MapSelectScene, TutorialScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
+  scene: [BootScene, TitleScene, AnimalSelectScene, MapSelectScene, TutorialScene, GameLoadScene, MazeScene, PauseScene, OwnerReturnScene, CollectionScene, ResultsScene]
 });
 
 if (import.meta.env.DEV) {

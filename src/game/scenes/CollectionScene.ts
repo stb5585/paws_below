@@ -3,6 +3,7 @@ import { FARM_TREASURE_CATALOG, FARM_TREASURE_SPRITE_FRAMES, TREASURE_CATALOG, T
 import type { MapId } from '../types';
 import type { PlayerProfile } from '../systems/profile';
 import { addMenuBackground, addPanel, createButton, heading } from '../ui';
+import { queueCollectionAssets, registerLoadedAssets } from '../systems/assets';
 
 export class CollectionScene extends Phaser.Scene {
   private from = 'Title';
@@ -10,7 +11,13 @@ export class CollectionScene extends Phaser.Scene {
   constructor() { super('Collection'); }
   init(data: { from?: string; page?: MapId }): void { this.from = data.from ?? 'Title'; this.page = data.page; }
 
+  preload(): void {
+    const profile = this.registry.get('profile') as PlayerProfile;
+    queueCollectionAssets(this, this.page ?? profile.selectedMapId);
+  }
+
   create(): void {
+    registerLoadedAssets(this);
     addMenuBackground(this, .55);
     const profile = this.registry.get('profile') as PlayerProfile;
     const page = this.page ?? profile.selectedMapId;
@@ -29,7 +36,7 @@ export class CollectionScene extends Phaser.Scene {
       const found = profile.collection.includes(item.id);
       addPanel(this, x, y, 230, 180, found ? .95 : .55);
       if (found) {
-        this.add.image(x, y - 28, farm ? 'farm-treasures-v3' : 'household-treasures-v4', farm ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[item.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`)
+        this.add.image(x, y - 28, farm ? 'farm-treasures' : 'household-treasures', farm ? `farm-treasure-${FARM_TREASURE_SPRITE_FRAMES[item.id]}` : `treasure-${TREASURE_SPRITE_FRAMES[item.id]}`)
           .setDisplaySize(86, 108);
       } else {
         this.add.text(x, y - 28, '?', { fontSize: '60px', color: '#fff1ca' }).setOrigin(.5).setAlpha(.45);

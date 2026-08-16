@@ -40,7 +40,7 @@ export class TutorialScene extends Phaser.Scene {
       profile.seenAnimals = [...new Set([...profile.seenAnimals, animal.id])];
       profile.seenLevels = [...new Set([...profile.seenLevels, `${animal.id}:${level.mapId}`])];
       saveProfile(profile);
-      this.scene.start('Maze');
+      this.scene.start('GameLoad', { destination: 'Maze' });
     }, { width: 320, height: 75, icon: '🐾', color: 0xd96545 });
   }
 }

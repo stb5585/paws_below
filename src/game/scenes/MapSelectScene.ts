@@ -10,7 +10,7 @@ export class MapSelectScene extends Phaser.Scene {
   constructor() { super('MapSelect'); }
 
   create(): void {
-    addMenuBackground(this, .48, 'title-animals-v1');
+    addMenuBackground(this, .48, 'title-animals');
     const profile = this.registry.get('profile') as PlayerProfile;
     const sound = this.registry.get('soundscape') as Soundscape;
     const animal = getAnimal(profile.selectedAnimalId);
@@ -23,10 +23,8 @@ export class MapSelectScene extends Phaser.Scene {
       const x = index === 0 ? 390 : 890;
       const selected = world.id === profile.selectedMapId;
       addPanel(this, x, 350, 420, 430, .95).setStrokeStyle(5, selected ? 0xffdc72 : 0x82dfc4, .92);
-      const texture = world.theme === 'farm' ? 'farm-atlas-v3' : 'burrow-atlas-v4';
-      const frame = world.theme === 'farm' ? 'farm-2' : 'env-4';
       this.add.circle(x, 258, 112, world.theme === 'farm' ? 0x91c967 : 0x7a5238, .25);
-      this.add.image(x, 260, texture, frame).setDisplaySize(210, 210);
+      this.add.text(x, 260, world.theme === 'farm' ? '🚜' : '💎', { fontSize: '92px' }).setOrigin(.5);
       this.add.text(x, 172, world.title.toUpperCase(), {
         fontFamily:'Fredoka, sans-serif',fontSize:'31px',color:'#fff1ca',fontStyle:'bold',stroke:'#2c1711',strokeThickness:5
       }).setOrigin(.5);
@@ -38,7 +36,8 @@ export class MapSelectScene extends Phaser.Scene {
       }).setOrigin(.5);
       createButton(this, x, 535, 'CHOOSE THIS MAP', () => {
         sound.click(); profile.selectedMapId = world.id; saveProfile(profile);
-        this.scene.start(profile.seenLevels.includes(`${animal.id}:${world.id}`) ? 'Maze' : 'Tutorial');
+        const destination = profile.seenLevels.includes(`${animal.id}:${world.id}`) ? 'Maze' : 'Tutorial';
+        this.scene.start(destination === 'Maze' ? 'GameLoad' : destination, destination === 'Maze' ? { destination } : undefined);
       }, { width:330,height:62,fontSize:22,icon:world.theme === 'farm' ? '🚜' : '💎',color:world.theme === 'farm' ? 0x5e9858 : 0x68558c });
     });
     createButton(this, 120, 660, 'BACK', () => this.scene.start('AnimalSelect'), { width:180,height:48,fontSize:20,icon:'←',color:0x694638 });

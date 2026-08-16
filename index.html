@@ -9,13 +9,17 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./assets/paws-icon-v2-192.png" type="image/png" />
-    <link rel="apple-touch-icon" href="./assets/paws-icon-v2-192.png" />
+    <link rel="icon" href="./assets/paws-icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./assets/paws-icon-192.png" />
     <title>Paws Below</title>
   </head>
   <body>
     <main id="app" aria-label="Paws Below game">
       <div id="game"></div>
+      <div id="update-message" role="status" hidden>
+        <span>A fresh adventure is ready!</span>
+        <button id="update-button" type="button">UPDATE</button>
+      </div>
       <div id="rotate-message" role="status">
         <span class="rotate-icon">↻</span>
         <strong>Turn your device sideways</strong>
