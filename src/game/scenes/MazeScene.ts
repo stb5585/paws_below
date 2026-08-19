@@ -13,6 +13,7 @@ import { shouldShowTouchControls } from '../systems/device';
 import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
+import { canOccupyFootprint } from '../systems/movement';
 import {
   ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, blendRgb,
   UiDepth, visibilityTint, WorldLayer, projectGridPoint, worldDepth
@@ -394,7 +395,7 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private canOccupy(x: number, y: number): boolean {
-    return this.world.isFloorCell(Math.round(x), Math.round(y));
+    return canOccupyFootprint(this.world.isFloorCell, x, y);
   }
 
   private crossingAt(point: GridPoint): { point: GridPoint; standingLift: number } | undefined {

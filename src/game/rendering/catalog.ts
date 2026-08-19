@@ -102,8 +102,8 @@ export function placementForWallSpan(from: GridPoint, to: GridPoint): WallSpanPl
   };
 }
 
-/** Moves an outside boundary wall halfway toward the playable cells it borders. */
-export function wallInsetTowardGround(directions: readonly GridPoint[]): GridPoint {
+/** Moves a wall toward the playable cells it borders. */
+export function wallInsetTowardGround(directions: readonly GridPoint[], distance = .5): GridPoint {
   if (!directions.length) return { x: 0, y: 0 };
   directions.forEach(direction => {
     if (Math.abs(direction.x) + Math.abs(direction.y) !== 1) {
@@ -111,8 +111,8 @@ export function wallInsetTowardGround(directions: readonly GridPoint[]): GridPoi
     }
   });
   return {
-    x: directions.reduce((sum, direction) => sum + direction.x, 0) / directions.length / 2,
-    y: directions.reduce((sum, direction) => sum + direction.y, 0) / directions.length / 2
+    x: directions.reduce((sum, direction) => sum + direction.x, 0) / directions.length * distance,
+    y: directions.reduce((sum, direction) => sum + direction.y, 0) / directions.length * distance
   };
 }
 

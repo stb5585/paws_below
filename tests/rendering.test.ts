@@ -88,6 +88,7 @@ describe('isometric rendering order', () => {
     expect(wallInsetTowardGround([{ x: -1, y: 0 }])).toEqual({ x: -.5, y: 0 });
     expect(wallInsetTowardGround([{ x: 1, y: 0 }, { x: 0, y: 1 }])).toEqual({ x: .25, y: .25 });
     expect(wallInsetTowardGround([{ x: 1, y: 0 }, { x: -1, y: 0 }])).toEqual({ x: 0, y: 0 });
+    expect(wallInsetTowardGround([{ x: 0, y: 1 }], 1)).toEqual({ x: 0, y: 1 });
     expect(wallInsetTowardGround([])).toEqual({ x: 0, y: 0 });
     expect(() => wallInsetTowardGround([{ x: 1, y: 1 }])).toThrow();
   });

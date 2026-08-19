@@ -52,11 +52,21 @@ export class EnvironmentRenderer {
 
   render(): EnvironmentView[] {
     const crossingKeys = new Set(this.world.jumpPaths.flat().map(pointKey));
+    const blockKeys = new Set<string>();
+    this.world.blocks.forEach(block => {
+      for (let y = block.y; y < block.y + block.height; y++) {
+        for (let x = block.x; x < block.x + block.width; x++) blockKeys.add(pointKey({ x, y }));
+      }
+    });
     const lavaTiles: Phaser.GameObjects.Graphics[] = [];
     for (let y = 0; y < this.world.height; y++) {
       for (let x = 0; x < this.world.width; x++) {
-        if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
         const point = { x, y };
+        if (blockKeys.has(pointKey(point))) {
+          this.drawFloor(point);
+          continue;
+        }
+        if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
         if (this.world.isObstacleCell(x, y)) {
           if (this.world.theme === 'burrow') lavaTiles.push(this.drawLava(point));
           else this.drawFloor(point);
@@ -252,8 +262,8 @@ export class EnvironmentRenderer {
     });
     fencePlacements.forEach(({ from, to, group }) => {
       const placement = placementForWallSpan(from, to);
-      const fromInset = this.boundaryWallInset(from);
-      const toInset = this.boundaryWallInset(to);
+      const fromInset = this.boundaryWallInset(from, 1);
+      const toInset = this.boundaryWallInset(to, 1);
       const inset = { x: (fromInset.x + toInset.x) / 2, y: (fromInset.y + toInset.y) / 2 };
       const placementOffset = {
         x: placement.placementOffset.x + inset.x, y: placement.placementOffset.y + inset.y
@@ -284,7 +294,7 @@ export class EnvironmentRenderer {
     });
   }
 
-  private boundaryWallInset(point: GridPoint): GridPoint {
+  private boundaryWallInset(point: GridPoint, distance = .5): GridPoint {
     const directions = [
       { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
     ].filter(direction => {
@@ -292,7 +302,7 @@ export class EnvironmentRenderer {
       const y = point.y + direction.y;
       return this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y);
     });
-    return wallInsetTowardGround(directions);
+    return wallInsetTowardGround(directions, distance);
   }
 
   private drawDecor(item: WorldPropPlacement): void {
