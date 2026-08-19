@@ -526,6 +526,9 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length,
       backFenceInset: backFence?.point.y - 1,
       sideFenceInset: sideFence?.point.x - 1,
+      everyFenceGrounded: fences.every((view: any) => view.coveredPoints.every((point: any) =>
+        images.some((candidate: any) => candidate.point.x === point.x && candidate.point.y === point.y
+          && candidate.object.frame.name === 'farm-0'))),
       bottomWallCollision: {
         inside: scene.canOccupy(14, 21.19), outside: scene.canOccupy(14, 21.21)
       },
@@ -540,7 +543,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
   });
   expect(farmFixture).toEqual(expect.objectContaining({
     crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1,
-    backFenceInset: 1, sideFenceInset: 1,
+    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true,
     bottomWallCollision: { inside: true, outside: false }
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);

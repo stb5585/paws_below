@@ -37,6 +37,22 @@ export function diamondPoints(projection: IsometricProjection = GAME_PROJECTION)
   ];
 }
 
+export function diamondHalfToward(
+  direction: GridPoint,
+  projection: IsometricProjection = GAME_PROJECTION
+): number[] {
+  const { x, y } = direction;
+  if (Math.abs(x) + Math.abs(y) !== 1) {
+    throw new Error('A diamond half must face one adjacent grid cell');
+  }
+  const halfWidth = projection.tileWidth / 2;
+  const halfHeight = projection.tileHeight / 2;
+  if (x > 0) return [0, 0, halfWidth, 0, 0, halfHeight];
+  if (x < 0) return [0, 0, -halfWidth, 0, 0, -halfHeight];
+  if (y > 0) return [0, 0, -halfWidth, 0, 0, halfHeight];
+  return [0, 0, 0, -halfHeight, halfWidth, 0];
+}
+
 export function blendRgb(from: number, to: number, amount: number): number {
   const t = Math.max(0, Math.min(1, amount));
   const channel = (shift: number) => Math.round(((from >> shift) & 0xff) * (1 - t) + ((to >> shift) & 0xff) * t);

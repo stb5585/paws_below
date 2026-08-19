@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
-  actorOverlayDepth, blendRgb, diamondPoints, projectGridPoint, visibilityTint, worldDepth
+  actorOverlayDepth, blendRgb, diamondHalfToward, diamondPoints, projectGridPoint, visibilityTint, worldDepth
 } from '../src/game/systems/rendering';
 import { ENVIRONMENT_ASSETS, placementForWallSpan, wallInsetTowardGround } from '../src/game/rendering/catalog';
 
@@ -47,6 +47,14 @@ describe('isometric rendering order', () => {
     expect(blendRgb(0x314b2b, 0x79a950, 1)).toBe(0x79a950);
     expect(visibilityTint(0)).toBe(0x141414);
     expect(visibilityTint(1)).toBe(0xffffff);
+  });
+
+  it('defines clipped half-diamonds for transparent boundary props', () => {
+    expect(diamondHalfToward({ x: 1, y: 0 })).toEqual([0, 0, 48, 0, 0, 24]);
+    expect(diamondHalfToward({ x: -1, y: 0 })).toEqual([0, 0, -48, 0, 0, -24]);
+    expect(diamondHalfToward({ x: 0, y: 1 })).toEqual([0, 0, -48, 0, 0, 24]);
+    expect(diamondHalfToward({ x: 0, y: -1 })).toEqual([0, 0, 0, -24, 48, 0]);
+    expect(() => diamondHalfToward({ x: 1, y: 1 })).toThrow();
   });
 
   it('defines normalized ground anchors and footprints for every environment asset', () => {

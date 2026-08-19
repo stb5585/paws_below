@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
-import { diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
+import { diamondHalfToward, diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
   ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan, wallInsetTowardGround,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
@@ -262,8 +262,10 @@ export class EnvironmentRenderer {
     });
     fencePlacements.forEach(({ from, to, group }) => {
       const placement = placementForWallSpan(from, to);
-      const fromInset = this.boundaryWallInset(from, 1);
-      const toInset = this.boundaryWallInset(to, 1);
+      this.drawBoundaryFoundation(from);
+      this.drawBoundaryFoundation(to);
+      const fromInset = this.boundaryWallInset(from);
+      const toInset = this.boundaryWallInset(to);
       const inset = { x: (fromInset.x + toInset.x) / 2, y: (fromInset.y + toInset.y) / 2 };
       const placementOffset = {
         x: placement.placementOffset.x + inset.x, y: placement.placementOffset.y + inset.y
@@ -294,15 +296,48 @@ export class EnvironmentRenderer {
     });
   }
 
-  private boundaryWallInset(point: GridPoint, distance = .5): GridPoint {
-    const directions = [
+  private groundDirections(point: GridPoint): GridPoint[] {
+    return [
       { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
     ].filter(direction => {
       const x = point.x + direction.x;
       const y = point.y + direction.y;
       return this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y);
     });
-    return wallInsetTowardGround(directions, distance);
+  }
+
+  private boundaryWallInset(point: GridPoint, distance = .5): GridPoint {
+    return wallInsetTowardGround(this.groundDirections(point), distance);
+  }
+
+  private drawBoundaryFoundation(point: GridPoint): void {
+    const position = projectGridPoint(point);
+    const maskShape = this.scene.make.graphics({}, false).fillStyle(0xffffff, 1);
+    const bases: Array<{ object: Phaser.GameObjects.Polygon; color: number }> = [];
+    this.groundDirections(point).forEach(direction => {
+      const adjacent = { x: point.x + direction.x, y: point.y + direction.y };
+      const color = this.world.theme === 'farm'
+        ? FARM_GRASS[Math.abs(adjacent.x * 7 + adjacent.y * 11) % FARM_GRASS.length]
+        : (adjacent.x + adjacent.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
+      const triangle = diamondHalfToward(direction);
+      const base = this.scene.add.polygon(position.x, position.y, triangle, color, 1)
+        .setDepth(GroundDepth.base);
+      bases.push({ object: base, color });
+      maskShape.fillPoints([
+        new Phaser.Geom.Point(position.x + triangle[0], position.y + triangle[1]),
+        new Phaser.Geom.Point(position.x + triangle[2], position.y + triangle[3]),
+        new Phaser.Geom.Point(position.x + triangle[4], position.y + triangle[5])
+      ], true);
+    });
+    if (!bases.length) {
+      maskShape.destroy();
+      return;
+    }
+    bases.forEach(base => this.track(point, [base.object], false, undefined, undefined, base.color));
+    const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
+      depth: GroundDepth.detail, alpha: this.world.theme === 'farm' ? .72 : 1
+    }).setMask(maskShape.createGeometryMask());
+    this.track(point, [texture]);
   }
 
   private drawDecor(item: WorldPropPlacement): void {
