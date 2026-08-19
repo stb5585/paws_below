@@ -46,7 +46,6 @@ export const BURROW: LevelDefinition = {
   id: 'burrow-maze-1',
   animalId: DOG.id,
   mapId: 'underground',
-  mapKey: 'burrow-map',
   title: 'The Buried Burrow',
   goal: DOG.goal,
   start: { x: 6, y: 4 },
@@ -57,7 +56,6 @@ export const RABBIT_BURROW: LevelDefinition = {
   id: 'rabbit-burrow-1',
   animalId: BUNNY.id,
   mapId: 'underground',
-  mapKey: 'burrow-map',
   title: 'The Carrot Burrow',
   goal: BUNNY.goal,
   start: { x: 6, y: 4 },
@@ -65,13 +63,13 @@ export const RABBIT_BURROW: LevelDefinition = {
 };
 
 export const DOG_FARM: LevelDefinition = {
-  id: 'dog-farm-1', animalId: DOG.id, mapId: 'farm', mapKey: 'farm-field', title: 'Sunny Farm Field',
+  id: 'dog-farm-1', animalId: DOG.id, mapId: 'farm', title: 'Sunny Farm Field',
   goal: { type: 'collectThenReachExit', collectibleKind: 'food', target: 12, exitId: 'red-barn' },
   start: { x: 4, y: 4 }, exit: { x: 29, y: 19 }
 };
 
 export const BUNNY_FARM: LevelDefinition = {
-  id: 'bunny-farm-1', animalId: BUNNY.id, mapId: 'farm', mapKey: 'farm-field', title: 'Sunny Farm Field',
+  id: 'bunny-farm-1', animalId: BUNNY.id, mapId: 'farm', title: 'Sunny Farm Field',
   goal: { type: 'collectThenReachExit', collectibleKind: 'food', target: 12, exitId: 'red-barn' },
   start: { x: 4, y: 4 }, exit: { x: 29, y: 19 }
 };

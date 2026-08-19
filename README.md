@@ -29,19 +29,21 @@ The installed game launches in landscape standalone mode. Its small menu shell i
 - Dig: E or the bone button; Pip always performs the dig animation, even when there is no buried item nearby
 - Bark/Honk: B or the animal button; Pip barks and Mochi honks. Near active treasure, three calls play and reveal a temporary direction arrow
 - Pause: Escape or the pause button
-- Touch controls: detected automatically on phones and hybrid laptops, or forced on/off from the title and pause menus
-- Touch movement: switch between Follow Touch and Joystick from the title or pause menu
+- Settings: configure sound, lighting, touch controls, and movement style; best scores can be reset separately from treasures and preferences
+- Touch controls: detected automatically on phones and hybrid laptops, or forced on/off from Settings and Pause
+- Touch movement: switch between Follow Touch and Joystick from Settings or Pause
 - Guidance: the HUD tracks the trip home and collection progress, with stronger contextual prompts and extra help if the animal stops making progress
 
 ## Checks
 
 ```bash
 npm test
+npm run validate:content
 npm run test:e2e
 npm run build
 ```
 
-The unit suite checks animals and map-specific goals, per-animal scores, scoring, powers, saves, treasure selection, farm and burrow reachability, obstacle separation, and crossing definitions. The Playwright suite checks the title → animal → map flow, both environments, desktop rendering, landscape touch input, and the portrait orientation prompt.
+The unit suite checks animals and map-specific goals, per-animal scores, appearance migration, score-only reset behavior, powers, saves, treasure selection, map reachability, obstacle separation, crossing definitions, isometric depth ordering, and orientation-guard decisions. The Playwright suite checks the title → animal → map flow, Settings confirmation/cancellation, both environments, desktop rendering, landscape touch input, same-session portrait/landscape transitions, atlas integrity, and representative behind/in-front renderer fixtures.
 
 ## Improvement roadmap
 
@@ -49,12 +51,11 @@ See [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) for the prioritized game, mob
 
 ## Project structure
 
-- `src/game/data` contains reusable animal, level, collectible, power, map, and treasure definitions.
-- `src/game/systems` contains persistence, scoring, sound, and treasure-selection logic.
+- `src/game/data` contains the authoritative animal, level, collectible, power, world, and treasure definitions.
+- `src/game/rendering` contains the environment renderer and semantic atlas/ground-anchor contract.
+- `src/game/systems` contains persistence, scoring, sound, treasure selection, layout, collection, guidance, and rendering helpers.
 - `src/game/systems/assets.ts` owns deferred animal/map loading and shared atlas registration.
 - `src/game/scenes` contains the title, animal selection, map selection, tutorial, maze, pause, return-home, collection, and results flows.
-- `public/assets/burrow-map.json` is the isometric Tiled map metadata.
-- `public/assets/title-burrow.webp` is the original generated storybook title artwork.
 - `public/assets/pip-animations.webp` contains Pip's transparent, safely padded run, dig, jump, bark, and idle animation frames.
 - `public/assets/title-animals.webp` is the two-animal burrow-and-farm title artwork.
 - `public/assets/bunny-animations.webp` contains transparent, individually repacked run, dig, jump, honk, and idle frames with guarded edges that prevent sprite wrapping.

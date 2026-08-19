@@ -135,6 +135,45 @@ test('landscape touch layout accepts gameplay taps', async ({ page }, testInfo) 
   await expect(canvas).toBeVisible();
 });
 
+test('pause actions clear when resuming or abandoning a run', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'underground', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:underground'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
+  })));
+  const active = (scene: string) => page.evaluate(key => (window as any).__PAWS_GAME__.scene.isActive(key), scene);
+  const enterMaze = async () => {
+    await page.mouse.click(640, 270);
+    await expect.poll(() => active('AnimalSelect')).toBe(true);
+    await page.mouse.click(390, 530);
+    await expect.poll(() => active('MapSelect')).toBe(true);
+    await page.mouse.click(390, 535);
+    await expect.poll(() => active('Maze'), { timeout: 30_000 }).toBe(true);
+  };
+
+  await page.goto('/');
+  await expect.poll(() => active('Title')).toBe(true);
+  await enterMaze();
+  await page.evaluate(() => { (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause = true; });
+  await expect.poll(() => active('Pause')).toBe(true);
+  await page.mouse.click(640, 155);
+  await expect.poll(() => active('Pause')).toBe(false);
+  await page.waitForTimeout(350);
+  expect(await active('Maze')).toBe(true);
+  expect(await page.evaluate(() => (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause)).toBe(false);
+
+  await page.evaluate(() => { (window as any).__PAWS_GAME__.scene.getScene('Maze').queued.pause = true; });
+  await expect.poll(() => active('Pause')).toBe(true);
+  await page.mouse.click(640, 545);
+  await expect.poll(() => active('Title')).toBe(true);
+  await enterMaze();
+  await page.waitForTimeout(350);
+  expect(await active('Pause')).toBe(false);
+  expect(await active('Maze')).toBe(true);
+});
+
 test('every gameplay atlas keeps visible pixels inside guarded frame cells', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.goto('/');
@@ -170,6 +209,101 @@ test('every gameplay atlas keeps visible pixels inside guarded frame cells', asy
     expect(result.divisible, spec.asset).toBe(true);
     expect(result.minimum, spec.asset).toBeGreaterThanOrEqual(spec.minimum);
   }
+});
+
+test('isometric depth follows ground contact around a blocked tile', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'underground', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:underground'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 }
+  })));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  await page.mouse.click(640, 270);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('AnimalSelect'))).toBe(true);
+  await page.mouse.click(390, 530);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('MapSelect'))).toBe(true);
+  await page.mouse.click(390, 535);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Maze')), { timeout: 30_000 }).toBe(true);
+
+  const behind = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const walls = scene.tileViews.filter((view: any) => view.point.x === 4 && view.point.y === 3
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    const connectedWall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 4
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    const floors = scene.tileViews.filter((view: any) => view.object.texture?.key === 'burrow-atlas'
+      && view.object.frame?.name === 'env-0');
+    scene.player.x = 3; scene.player.y = 3; scene.positionDog(0, false);
+    scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    return {
+      actor: scene.dog.depth,
+      wall: walls[0]?.object.depth,
+      wallAlpha: walls[0]?.object.alpha,
+      connectedWallAlpha: connectedWall?.object.alpha,
+      wallGroup: walls[0]?.occlusionGroup,
+      connectedWallGroup: connectedWall?.occlusionGroup,
+      maximumFloorDepth: Math.max(...floors.map((view: any) => view.object.depth)),
+      renderedBlockCells: walls.length
+    };
+  });
+  expect(behind.renderedBlockCells).toBe(1);
+  expect(behind.actor).toBeGreaterThan(behind.maximumFloorDepth);
+  expect(behind.actor).toBeLessThan(behind.wall);
+  expect(behind.wallAlpha).toBe(1);
+  expect(behind.connectedWallAlpha).toBe(1);
+  expect(behind.connectedWallGroup).toBe(behind.wallGroup);
+  const wallOcclusion = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const group = scene.wallOcclusionGroups.find((candidate: any) => candidate.id === scene.tileViews.find((view: any) =>
+      view.point.x === 4 && view.point.y === 3 && view.object.frame?.name === 'env-1').occlusionGroup);
+    return {
+      overlayVisible: scene.dogOcclusionSprite.visible,
+      overlayDepth: scene.dogOcclusionSprite.depth,
+      maximumGroupDepth: Math.max(...group.members.map((member: any) => member.object.depth)),
+      membersVisible: group.members.every((member: any) => member.object.visible)
+    };
+  });
+  expect(wallOcclusion.overlayVisible).toBe(true);
+  expect(wallOcclusion.overlayDepth).toBeGreaterThan(wallOcclusion.maximumGroupDepth);
+  expect(wallOcclusion.membersVisible).toBe(true);
+  const undergroundFixture = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const images = scene.tileViews.filter((view: any) => view.object.texture);
+    const crossings = images.filter((view: any) => view.object.texture.key === 'burrow-atlas' && view.object.frame.name === 'env-3');
+    const floor = images.find((view: any) => view.object.texture.key === 'burrow-atlas' && view.object.originY < .6);
+    const homes = scene.children.list.filter((object: any) => object.texture?.key === 'burrow-atlas' && object.frame?.name === 'env-4');
+    return {
+      crossings: crossings.length,
+      expectedCrossings: new Set(scene.world.jumpPaths.flat()
+        .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
+        .map((point: any) => `${point.x},${point.y}`)).size,
+      floorAnchorY: floor?.object.originY,
+      wallAnchorY: images.find((view: any) => view.object.frame.name === 'env-1')?.object.originY,
+      homes: homes.length
+    };
+  });
+  expect(undergroundFixture).toEqual(expect.objectContaining({ crossings: 8, expectedCrossings: 8, homes: 1 }));
+  expect(undergroundFixture.floorAnchorY).toBeCloseTo(.536, 3);
+  expect(undergroundFixture.wallAnchorY).toBeCloseTo(.763, 3);
+  await page.screenshot({ path: testInfo.outputPath('depth-behind-wall.png') });
+
+  const inFront = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const wall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 3
+      && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
+    scene.player.x = 5; scene.player.y = 4; scene.positionDog(0, false);
+    scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    return { actor: scene.dog.depth, wall: wall.object.depth, wallAlpha: wall.object.alpha, overlayVisible: scene.dogOcclusionSprite.visible };
+  });
+  expect(inFront.actor).toBeGreaterThan(inFront.wall);
+  expect(inFront.wallAlpha).toBe(1);
+  expect(inFront.overlayVisible).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
 });
 
 test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
@@ -270,6 +404,55 @@ test('animal selection flows through map selection with corrected bunny artwork'
   await page.screenshot({path:testInfo.outputPath('bunny-jump-frame.png')});
 });
 
+test('settings cancels or confirms a score-only reset without losing other progress', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 900, collection: ['striped-sock'], pirateBadge: true, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'on', touchMovement: 'joystick',
+    selectedAnimalId: 'cream-bunny', selectedMapId: 'farm', seenAnimals: ['white-dog', 'cream-bunny'],
+    seenLevels: ['white-dog:underground', 'cream-bunny:farm'],
+    bestScores: { 'white-dog': 900, 'cream-bunny': 450 },
+    appearance: { version: 1, animals: {
+      'white-dog': { palette: 'warm-gold', extras: { collar: 'mint-stars' }, homeStyle: 'classic-doghouse' },
+      'cream-bunny': { palette: 'natural-cream', extras: { collar: 'none' }, homeStyle: 'classic-pen' }
+    } }
+  })));
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  await page.mouse.click(640, 495);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Settings'))).toBe(true);
+
+  await page.mouse.click(640, 430);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('paws-below-profile-v1')!).bestScore)).toBe(900);
+  await page.screenshot({ path: testInfo.outputPath('settings-reset-confirmation.png') });
+  await page.mouse.click(800, 430);
+  expect(await page.evaluate(() => ({
+    armed: (window as any).__PAWS_GAME__.scene.getScene('Settings').resetArmed,
+    score: JSON.parse(localStorage.getItem('paws-below-profile-v1')!).bestScore
+  }))).toEqual({ armed: false, score: 900 });
+
+  await page.mouse.click(640, 430);
+  await page.mouse.click(480, 430);
+  const reset = await page.evaluate(() => {
+    const profile = JSON.parse(localStorage.getItem('paws-below-profile-v1')!);
+    return {
+      bestScore: profile.bestScore, bestScores: profile.bestScores, collection: profile.collection,
+      pirateBadge: profile.pirateBadge, touchControls: profile.touchControls,
+      touchMovement: profile.touchMovement, appearance: profile.appearance.animals['white-dog']
+    };
+  });
+  expect(reset).toEqual({
+    bestScore: 0, bestScores: { 'white-dog': 0, 'cream-bunny': 0 }, collection: ['striped-sock'],
+    pirateBadge: true, touchControls: 'on', touchMovement: 'joystick',
+    appearance: { palette: 'warm-gold', extras: { collar: 'mint-stars' }, homeStyle: 'classic-doghouse' }
+  });
+  await page.mouse.click(640, 620);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isActive('Title'))).toBe(true);
+  const bestLabel = await page.evaluate(() => (window as any).__PAWS_GAME__.scene.getScene('Title').children.list
+    .find((object: any) => typeof object.text === 'string' && object.text.startsWith('BEST SCORE'))?.text);
+  expect(bestLabel).toBe('BEST SCORE  0');
+});
+
 test('Mochi is grounded in the refined farm collection quest', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
@@ -291,6 +474,35 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     collectibles:scene.collectibleViews.length
   };});
   expect(farm).toEqual({animal:'cream-bunny',map:'farm',theme:'farm',goal:'collectThenReachExit',digSpots:4,collectibles:36});
+  const farmFixture = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 7; scene.player.y = 7; scene.positionDog(0, false);
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const images = scene.tileViews.filter((view: any) => view.object.texture?.key === 'farm-atlas');
+    const crossingKeys = new Set(scene.world.jumpPaths.flat()
+      .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
+      .map((point: any) => `${point.x},${point.y}`));
+    const crossings = images.filter((view: any) => crossingKeys.has(`${view.point.x},${view.point.y}`)
+      && ['farm-4', 'farm-5'].includes(view.object.frame.name));
+    const blockCounts = scene.world.blocks.flatMap((block: any) => {
+      const counts: number[] = [];
+      for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
+        counts.push(images.filter((view: any) => view.point.x === x && view.point.y === y && view.object.frame.name === 'farm-1').length);
+      }
+      return counts;
+    });
+    return {
+      crossings: crossings.length,
+      expectedCrossings: crossingKeys.size,
+      everyBlockOnce: blockCounts.every((count: number) => count === 1),
+      grassAnchorY: images.find((view: any) => view.object.frame.name === 'farm-0')?.object.originY,
+      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length
+    };
+  });
+  expect(farmFixture).toEqual(expect.objectContaining({
+    crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1
+  }));
+  expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
   await page.screenshot({path:testInfo.outputPath('farm-map.png')});
 });
 
@@ -344,9 +556,14 @@ test('production service worker serves navigation offline without returning HTML
   await context.setOffline(false);
 });
 
-test('portrait touch devices receive a rotate prompt', async ({ page }, testInfo) => {
+test('portrait touch devices receive a rotate prompt that clears after rotation', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'portrait-guard');
   await page.goto('/');
   await expect(page.locator('#rotate-message')).toBeVisible();
   await expect(page.locator('#rotate-message')).toContainText('Turn your device sideways');
+  await page.setViewportSize({ width: 844, height: 390 });
+  await expect(page.locator('#rotate-message')).toBeHidden();
+  await expect(page.locator('canvas')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#rotate-message')).toBeVisible();
 });

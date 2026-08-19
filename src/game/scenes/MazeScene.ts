@@ -3,7 +3,6 @@ import {
   BURROW, DOG, FARM_TREASURE_SPRITE_FRAMES, POWERS, TREASURE_SPRITE_FRAMES,
   ZOOMIE_SPEED_MULTIPLIER, getAnimal, getLevelForAnimal
 } from '../data/content';
-import { TILE_H, TILE_W, gridToWorld } from '../data/level';
 import { UNDERGROUND_WORLD, getWorld, type WorldDefinition } from '../data/worlds';
 import type { ActiveDigSpot, AnimalDefinition, CollectibleDefinition, GridPoint, LevelDefinition, PlayerActions, PowerKind, RunResults } from '../types';
 import { addDiscoveries, animalBestScore, saveProfile, type PlayerProfile } from '../systems/profile';
@@ -14,18 +13,14 @@ import { shouldShowTouchControls } from '../systems/device';
 import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
+import { ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
+import { EnvironmentRenderer, type EnvironmentOcclusionGroup, type EnvironmentView } from '../rendering/EnvironmentRenderer';
 
 interface PlayerModel extends GridPoint { jumpLift: number }
-interface TileView { point: GridPoint; object: Phaser.GameObjects.Shape | Phaser.GameObjects.Image; discovered: boolean }
 interface CollectibleView { definition: CollectibleDefinition; object: Phaser.GameObjects.Container; collected: boolean }
 interface DigView { spot: ActiveDigSpot; object: Phaser.GameObjects.Container }
 interface UiAnchor { object: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform; x: number; y: number }
 interface TouchTarget { circle: Phaser.GameObjects.Arc; x: number; y: number; radius: number }
-
-const COLORS = {
-  floorA: 0x8d5d3d, floorB: 0x7b4c35, floorEdge: 0x4d2d23,
-  wallTop: 0x5b3628, wallSide: 0x362019
-};
 
 export class MazeScene extends Phaser.Scene {
   private player: PlayerModel = { ...BURROW.start, jumpLift: 0 };
@@ -34,11 +29,13 @@ export class MazeScene extends Phaser.Scene {
   private world: WorldDefinition = UNDERGROUND_WORLD;
   private dog!: Phaser.GameObjects.Container;
   private dogSprite!: Phaser.GameObjects.Sprite;
+  private dogOcclusionSprite!: Phaser.GameObjects.Sprite;
   private barkBubble!: Phaser.GameObjects.Text;
   private run = new RunState();
   private profile!: PlayerProfile;
   private audio!: Soundscape;
-  private tileViews: TileView[] = [];
+  private tileViews: EnvironmentView[] = [];
+  private wallOcclusionGroups: EnvironmentOcclusionGroup[] = [];
   private collectibleViews: CollectibleView[] = [];
   private digViews: DigView[] = [];
   private scoreText!: Phaser.GameObjects.Text;
@@ -83,9 +80,10 @@ export class MazeScene extends Phaser.Scene {
     this.audio = this.registry.get('soundscape') as Soundscape;
     this.player = { ...this.level.start, jumpLift: 0 };
     this.run = new RunState();
-    this.tileViews = []; this.collectibleViews = []; this.digViews = [];
+    this.tileViews = []; this.wallOcclusionGroups = []; this.collectibleViews = []; this.digViews = [];
     this.visited.clear(); this.busy = false; this.finished = false;
     this.touchUi = []; this.joystickUi = []; this.touchTargets = []; this.actionButtons.clear(); this.uiAnchors = [];
+    this.queued = { jump: false, dig: false, bark: false, pause: false };
     this.touchVector.set(0); this.joystickPointer = undefined; this.followPointer = undefined;
     this.pickupFrom = { x:this.player.x, y:this.player.y };
     this.lastDiscovery = this.time.now;
@@ -94,10 +92,12 @@ export class MazeScene extends Phaser.Scene {
     this.layout = getGameLayout(this);
     this.cameras.main.setBackgroundColor(this.world.theme === 'farm' ? '#314b2b' : '#170e0b');
     this.cameras.main.setBounds(0, 0, 3500, 1650);
-    this.drawWorld();
+    const environment = new EnvironmentRenderer(this, this.world);
+    this.tileViews = environment.render();
+    this.wallOcclusionGroups = environment.getOcclusionGroups();
     this.createCollectibles();
     this.createDigSpots();
-    this.createExit();
+    environment.renderHome(this.level, this.animal);
     this.createDog();
     this.createHud();
     this.createKeyboard();
@@ -128,7 +128,11 @@ export class MazeScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     if (this.finished) return;
     const actions = this.readActions();
-    if (actions.pause) { this.scene.pause(); this.scene.launch('Pause'); return; }
+    if (actions.pause) {
+      this.queued.pause = false;
+      this.stopTouchMovement();
+      this.scene.pause(); this.scene.launch('Pause'); return;
+    }
     if (actions.bark) this.bark();
     if (actions.dig) this.tryDig();
     if (actions.jump) this.tryJump(actions.moveX, actions.moveY);
@@ -144,160 +148,9 @@ export class MazeScene extends Phaser.Scene {
     this.queued = { jump: false, dig: false, bark: false, pause: false };
   }
 
-  private drawWorld(): void {
-    const stoneKeys = new Set(this.world.jumpPaths.flat().map(point => `${point.x},${point.y}`));
-    const lavaLayer = this.add.graphics().setDepth(2);
-    for (let y = 0; y < this.world.height; y++) {
-      for (let x = 0; x < this.world.width; x++) {
-        if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
-        const point = { x, y }; const world = gridToWorld(point);
-        const obstacle = this.world.isObstacleCell(x, y);
-        if (obstacle) {
-          if (this.world.theme === 'burrow') this.drawLavaTile(lavaLayer, point);
-          else this.drawFarmFloor(point, world);
-          if (stoneKeys.has(`${x},${y}`)) this.drawJumpObstacle(point);
-          continue;
-        }
-        if (this.world.theme === 'farm') this.drawFarmFloor(point, world);
-        else {
-          const color = (x + y) % 2 ? COLORS.floorA : COLORS.floorB;
-          const base = this.add.polygon(world.x, world.y, [0,-TILE_H/2,TILE_W/2,0,0,TILE_H/2,-TILE_W/2,0], color, 1)
-            .setStrokeStyle(1, COLORS.floorEdge, .45).setDepth(world.y);
-          const diamond = this.add.image(world.x, world.y - 4, 'burrow-atlas', 'env-0')
-            .setDisplaySize(112, 112).setDepth(world.y + 1);
-          this.tileViews.push({ point, object: base, discovered: false }, { point, object: diamond, discovered: false });
-        }
-      }
-    }
-    if (this.world.theme === 'burrow') this.tweens.add({ targets: lavaLayer, alpha: { from: .86, to: 1 }, duration: 980, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
-    this.drawWalls();
-    this.drawDecor();
-  }
-
-  private drawFarmFloor(point: GridPoint, world = gridToWorld(point)): void {
-    const grassColors = [0x79a950,0x74a04b,0x82ae57,0x6f9b48];
-    const color = grassColors[Math.abs(point.x * 7 + point.y * 11) % grassColors.length];
-    const base = this.add.polygon(world.x, world.y, [0,-TILE_H/2,TILE_W/2,0,0,TILE_H/2,-TILE_W/2,0], color, 1)
-      .setStrokeStyle(1, 0x41682f, .24).setDepth(world.y);
-    const grass = this.add.image(world.x, world.y - 4, 'farm-atlas', 'farm-0').setDisplaySize(110,110).setAlpha(.72).setDepth(world.y + 1);
-    this.tileViews.push({point,object:base,discovered:false},{point,object:grass,discovered:false});
-  }
-
-  private drawLavaTile(layer: Phaser.GameObjects.Graphics, point: GridPoint): void {
-    const world = gridToWorld(point);
-    const diamond = (halfWidth: number, halfHeight: number) => [
-      new Phaser.Geom.Point(world.x, world.y - halfHeight),
-      new Phaser.Geom.Point(world.x + halfWidth, world.y),
-      new Phaser.Geom.Point(world.x, world.y + halfHeight),
-      new Phaser.Geom.Point(world.x - halfWidth, world.y)
-    ];
-    layer.fillStyle(0x762018, 1).fillPoints(diamond(48, 24), true);
-    layer.lineStyle(1, 0x43130f, .9).strokePoints(diamond(47.5, 23.5), true);
-    layer.fillStyle((point.x + point.y) % 2 ? 0xf04427 : 0xdd3520, 1).fillPoints(diamond(46, 21.5), true);
-    layer.fillStyle(0xff6a2c, .58).fillPoints(diamond(40, 17), true);
-
-    const flip = (point.x * 17 + point.y * 29) % 2 ? 1 : -1;
-    layer.lineStyle(2, 0xffc24a, .82);
-    layer.beginPath();
-    layer.moveTo(world.x - 30, world.y - 4 * flip);
-    layer.lineTo(world.x - 10, world.y + 3 * flip);
-    layer.lineTo(world.x + 4, world.y - 3 * flip);
-    layer.lineTo(world.x + 28, world.y + 5 * flip);
-    layer.strokePath();
-    layer.lineStyle(1, 0xffe27a, .65);
-    layer.beginPath();
-    layer.moveTo(world.x - 5, world.y - 12);
-    layer.lineTo(world.x + 8, world.y - 4);
-    layer.lineTo(world.x + 18, world.y - 7);
-    layer.strokePath();
-    layer.fillStyle(0xffd45a, .72);
-    layer.fillCircle(world.x - 21 * flip, world.y + 4, 2.4);
-    layer.fillCircle(world.x + 18 * flip, world.y - 2, 1.7);
-  }
-
-  private drawJumpObstacle(point: GridPoint): void {
-    const world = gridToWorld(point);
-    // Crossing stones must render above every isometric lava tile. Using a
-    // dedicated foreground depth prevents later tiles in the draw order from
-    // covering the rock sprite while still keeping Puppy above it.
-    const farmObstacle = this.world.theme === 'farm';
-    const pathIndex = this.world.jumpPaths.findIndex(path => path.some(node => node.x === point.x && node.y === point.y));
-    const stone = this.add.image(world.x, world.y - (farmObstacle ? 15 : 9), farmObstacle ? 'farm-atlas' : 'burrow-atlas', farmObstacle ? `farm-${pathIndex % 2 ? 5 : 4}` : 'env-3')
-      .setDisplaySize(farmObstacle ? 76 : 80, farmObstacle ? 76 : 80)
-      .setDepth(6500);
-    this.tileViews.push({ point, object: stone, discovered: false });
-  }
-
-  private drawWalls(): void {
-    const wallCells = new Set<string>();
-    const addWall = (x: number, y: number) => {
-      if (x < 0 || y < 0 || x >= this.world.width || y >= this.world.height || this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y)) return;
-      wallCells.add(`${x},${y}`);
-    };
-    for (let y = 0; y < this.world.height; y++) for (let x = 0; x < this.world.width; x++) if (this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y)) {
-      addWall(x + 1, y); addWall(x - 1, y); addWall(x, y + 1); addWall(x, y - 1);
-    }
-    wallCells.forEach(key => {
-      const [x, y] = key.split(',').map(Number); const world = gridToWorld({x,y});
-      const landmark = this.world.theme === 'farm' && (key === '1,5' || key === '32,17');
-      const farmVariation = Math.abs(x * 5 + y * 13) % 17;
-      const farmFrame = landmark ? 3 : farmVariation === 0 ? 5 : farmVariation === 8 ? 13 : 1;
-      const farmSize = landmark ? 138 : farmFrame === 5 ? 108 : 118;
-      const farmLift = landmark ? 43 : farmFrame === 5 ? 20 : 31;
-      const wall = this.add.image(world.x, world.y - farmLift, this.world.theme === 'farm' ? 'farm-atlas' : 'burrow-atlas', this.world.theme === 'farm' ? `farm-${farmFrame}` : 'env-1')
-        .setDisplaySize(farmSize, farmSize).setDepth(world.y + (landmark ? 80 : 21));
-      this.tileViews.push({ point: {x,y}, object: wall, discovered: false });
-    });
-    this.world.blocks.forEach(block => {
-      if (this.world.theme === 'farm') {
-        for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
-          const point={x,y};const p=gridToWorld(point);
-          const corn=this.add.image(p.x,p.y-31,'farm-atlas','farm-1').setDisplaySize(118,118).setDepth(p.y+25);
-          this.tileViews.push({point,object:corn,discovered:false});
-        }
-        return;
-      }
-      const point = {x:block.x + block.width / 2, y:block.y + block.height / 2};
-      const p = gridToWorld(point);
-      const rock = this.add.image(p.x, p.y - 38, 'burrow-atlas', 'env-1')
-        .setDisplaySize(Math.max(118, block.width * 78), Math.max(118, block.height * 84)).setDepth(p.y + 25);
-      this.tileViews.push({ point, object: rock, discovered: false });
-    });
-  }
-
-  private drawDecor(): void {
-    if (this.world.theme === 'farm') {
-      const decor: Array<GridPoint & { frame:number; size:number }> = [
-        {x:7,y:9,frame:14,size:66},{x:10,y:21,frame:15,size:70},{x:17,y:12,frame:14,size:66},
-        {x:23,y:8,frame:15,size:70},{x:26,y:21,frame:14,size:66},{x:31,y:13,frame:15,size:70},
-        {x:4,y:20,frame:7,size:72},{x:28,y:7,frame:7,size:72}
-      ];
-      decor.forEach(item => {
-        const world = gridToWorld(item);
-        const image = this.add.image(world.x,world.y-item.size*.42,'farm-atlas',`farm-${item.frame}`).setDisplaySize(item.size,item.size).setDepth(world.y+30);
-        this.tileViews.push({point:item,object:image,discovered:false});
-      });
-      return;
-    }
-    const decor: Array<GridPoint & { frame: number; size: number }> = [
-      {x:2,y:2,frame:5,size:72},{x:8,y:3,frame:15,size:64},{x:13,y:1,frame:6,size:74},
-      {x:18,y:9,frame:13,size:63},{x:21,y:1,frame:6,size:82},{x:31,y:8,frame:5,size:76},
-      {x:22,y:13,frame:15,size:62},{x:32,y:21,frame:6,size:80},{x:10,y:13,frame:7,size:82},
-      {x:19,y:21,frame:5,size:76},{x:30,y:1,frame:7,size:68},{x:11,y:20,frame:15,size:58}
-    ];
-    decor.forEach(item => {
-      const world = gridToWorld(item);
-      const image = this.add.image(world.x, world.y - item.size * .42, 'burrow-atlas', `env-${item.frame}`)
-        .setDisplaySize(item.size, item.size).setDepth(world.y + 30);
-      if (item.frame === 5 || item.frame === 6 || item.frame === 15) {
-        this.tweens.add({targets:image,alpha:{from:.82,to:1},scaleX:{from:image.scaleX*.96,to:image.scaleX*1.04},scaleY:{from:image.scaleY*.96,to:image.scaleY*1.04},duration:1100+item.x*17,yoyo:true,repeat:-1});
-      }
-    });
-  }
-
   private createCollectibles(): void {
     this.world.collectibles.forEach((definition, index) => {
-      const world = gridToWorld(definition.position);
+      const world = projectGridPoint(definition.position);
       const shadow = this.add.ellipse(0, 13, 38, 14, 0x1b100c, .5);
       const rabbitFrame = definition.kind === 'food' ? 1 + index % 4 : definition.power === 'zoomie' ? 5 : definition.power === 'glow' ? 6 : 7;
       const dogFrame = definition.kind === 'food' ? 8 : definition.power === 'zoomie' ? 9 : definition.power === 'glow' ? 10 : 11;
@@ -305,7 +158,7 @@ export class MazeScene extends Phaser.Scene {
       const farmFrame = definition.kind === 'food' ? (this.animal.id === 'cream-bunny' ? 9 : 8) : definition.power === 'zoomie' ? 10 : definition.power === 'glow' ? 11 : 12;
       const frame = this.world.theme === 'farm' ? `farm-${farmFrame}` : this.animal.id === 'cream-bunny' ? `rabbit-${rabbitFrame}` : `env-${dogFrame}`;
       const icon = this.add.image(0, -5, texture, frame).setDisplaySize(definition.kind === 'food' ? 48 : 57, definition.kind === 'food' ? 48 : 57);
-      const container = this.add.container(world.x, world.y - 22, [shadow, icon]).setDepth(world.y + 40);
+      const container = this.add.container(world.x, world.y - 22, [shadow, icon]).setDepth(worldDepth(world.y, WorldLayer.interactive));
       this.tweens.add({ targets: icon, y: '-=8', angle: {from:-3,to:3}, duration: 700 + definition.position.x * 13, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
       this.collectibleViews.push({ definition, object: container, collected: false });
     });
@@ -317,21 +170,13 @@ export class MazeScene extends Phaser.Scene {
       this.world.specialDigSpots, this.world.specialTreasure
     );
     active.forEach(spot => {
-      const world = gridToWorld(spot);
+      const world = projectGridPoint(spot);
       const mound = this.add.image(0, -7, this.world.theme === 'farm' ? 'farm-atlas' : 'burrow-atlas', this.world.theme === 'farm' ? 'farm-6' : 'env-12').setDisplaySize(74,74);
       const glint = this.add.text(0, -32, '✦', { fontSize: '20px', color: '#ffd978', stroke:'#5e351c', strokeThickness:3 }).setOrigin(.5).setAlpha(.6);
-      const object = this.add.container(world.x, world.y + 1, [mound, glint]).setDepth(world.y + 32);
+      const object = this.add.container(world.x, world.y + 1, [mound, glint]).setDepth(worldDepth(world.y, WorldLayer.interactive));
       this.tweens.add({ targets: glint, alpha: {from:.25,to:.9}, scale: {from:.8,to:1.2}, duration: 900, yoyo: true, repeat: -1 });
       this.digViews.push({ spot, object });
     });
-  }
-
-  private createExit(): void {
-    const world = gridToWorld(this.level.exit);
-    const glow = this.add.circle(world.x, world.y - 64, 96, 0xffc45f, .2).setDepth(world.y + 20);
-    this.tweens.add({ targets: glow, scale: {from:.85,to:1.15}, alpha:{from:.12,to:.25}, duration:1200,yoyo:true,repeat:-1 });
-    this.add.image(world.x, world.y - 66, this.world.theme === 'farm' ? 'farm-atlas' : this.animal.homeTexture, this.world.theme === 'farm' ? 'farm-2' : this.animal.homeFrame)
-      .setDisplaySize(this.world.theme === 'farm' ? 220 : 190, this.world.theme === 'farm' ? 220 : 190).setDepth(world.y + 80);
   }
 
   private createDog(): void {
@@ -339,7 +184,10 @@ export class MazeScene extends Phaser.Scene {
     const spriteSize = 128 * (this.animal.gameScale ?? 1);
     this.dogSprite = this.add.sprite(0, -30 + (this.animal.groundOffsetY ?? 0), this.animal.spriteTexture, `${this.animal.spriteKey}-14`).setDisplaySize(spriteSize,spriteSize);
     this.dogSprite.play(`${this.animal.spriteKey}-idle`);
-    this.dog = this.add.container(0, 0, [shadow, this.dogSprite]).setDepth(7000);
+    const startWorld=projectGridPoint(this.player);
+    this.dog = this.add.container(0, 0, [shadow, this.dogSprite]).setDepth(worldDepth(startWorld.y, WorldLayer.actor));
+    this.dogOcclusionSprite = this.add.sprite(0, 0, this.animal.spriteTexture, `${this.animal.spriteKey}-14`)
+      .setDisplaySize(spriteSize, spriteSize).setAlpha(ACTOR_OCCLUSION_ALPHA).setVisible(false);
     this.barkBubble = this.add.text(0, -105, 'WOOF!', {
       fontFamily:'Fredoka, sans-serif',fontSize:'25px',color:'#fff3c9',fontStyle:'bold',stroke:'#4a281d',strokeThickness:5
     }).setOrigin(.5).setAlpha(0);
@@ -348,32 +196,32 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private createHud(): void {
-    const hudBg = this.add.rectangle(170, 54, 300, 78, 0x2b1913, .9).setStrokeStyle(3, 0xf2c47a, .55).setScrollFactor(0).setDepth(10000);
-    this.scoreText = this.add.text(58, 53, `${this.animal.foodIcon}  0`, { fontFamily:'Fredoka, sans-serif',fontSize:'29px',color:'#fff1ca',fontStyle:'bold' }).setOrigin(0,.5).setScrollFactor(0).setDepth(10001);
-    const best = this.add.text(274, 55, `BEST\n${animalBestScore(this.profile,this.animal.id)}`, {fontFamily:'Fredoka, sans-serif',fontSize:'15px',align:'center',color:'#82dfc4'}).setOrigin(.5).setScrollFactor(0).setDepth(10001);
+    const hudBg = this.add.rectangle(170, 54, 300, 78, 0x2b1913, .9).setStrokeStyle(3, 0xf2c47a, .55).setScrollFactor(0).setDepth(UiDepth.hud);
+    this.scoreText = this.add.text(58, 53, `${this.animal.foodIcon}  0`, { fontFamily:'Fredoka, sans-serif',fontSize:'29px',color:'#fff1ca',fontStyle:'bold' }).setOrigin(0,.5).setScrollFactor(0).setDepth(UiDepth.hudContent);
+    const best = this.add.text(274, 55, `BEST\n${animalBestScore(this.profile,this.animal.id)}`, {fontFamily:'Fredoka, sans-serif',fontSize:'15px',align:'center',color:'#82dfc4'}).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.hudContent);
     this.anchorUi(hudBg, 170, 54); this.anchorUi(this.scoreText, 58, 53); this.anchorUi(best, 274, 55);
-    const objectiveBg = this.add.rectangle(1040, 112, 260, 78, 0x2b1913, .94).setStrokeStyle(4, 0x82dfc4, .75).setScrollFactor(0).setDepth(10000);
+    const objectiveBg = this.add.rectangle(1040, 112, 260, 78, 0x2b1913, .94).setStrokeStyle(4, 0x82dfc4, .75).setScrollFactor(0).setDepth(UiDepth.hud);
     this.objectiveText = this.add.text(1040, 111, this.objectiveCopy(), {
       fontFamily:'Fredoka, sans-serif',fontSize:'16px',align:'center',color:'#fff1ca',fontStyle:'bold',lineSpacing:4
-    }).setOrigin(.5).setScrollFactor(0).setDepth(10001);
+    }).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.hudContent);
     this.anchorUi(objectiveBg, 1040, 112); this.anchorUi(this.objectiveText, 1040, 111);
     (Object.keys(POWERS) as PowerKind[]).forEach((kind, index) => {
       const x = 500 + index * 145;
       const bg = this.add.rectangle(0, 0, 128, 55, 0x2b1913, .82).setStrokeStyle(2, POWERS[kind].color, .5);
       const icon = this.add.text(-43, 0, kind === 'zoomie' ? '⚡' : kind === 'glow' ? '☀' : '👃', {fontSize:'26px'}).setOrigin(.5);
       const text = this.add.text(10, 0, '', {fontFamily:'Fredoka, sans-serif',fontSize:'17px',color:'#fff1ca',fontStyle:'bold'}).setOrigin(.5);
-      const container = this.add.container(x, 50, [bg,icon,text]).setScrollFactor(0).setDepth(10001).setAlpha(.3);
+      const container = this.add.container(x, 50, [bg,icon,text]).setScrollFactor(0).setDepth(UiDepth.hudContent).setAlpha(.3);
       this.powerHud.set(kind, container);
       this.anchorUi(container, x, 50);
     });
-    this.hint = this.add.container(0, 0).setDepth(8000).setAlpha(0);
+    this.hint = this.add.container(0, 0).setDepth(worldDepth(0, WorldLayer.effect)).setAlpha(0);
     const hintBg = this.add.rectangle(0, 0, 285, 66, 0x24140f, .97).setStrokeStyle(5, 0x82dfc4, .95);
     const hintText = this.add.text(0, 0, '🏠  HOME IS THIS WAY  ➜', {fontFamily:'Fredoka, sans-serif',fontSize:'21px',color:'#c8ffeb',fontStyle:'bold'}).setOrigin(.5);
     this.hint.add([hintBg,hintText]);
     const treasureBg = this.add.rectangle(0, 0, 260, 64, 0x3b2512, .98).setStrokeStyle(5, 0xffd55f, .95);
     const treasureLabel = this.add.text(-32, 0, 'TREASURE!', {fontFamily:'Fredoka, sans-serif',fontSize:'22px',color:'#fff2a8',fontStyle:'bold'}).setOrigin(.5);
     this.treasureHintArrow = this.add.text(92, 0, '➤', {fontFamily:'Arial, sans-serif',fontSize:'38px',color:'#ffcf45',fontStyle:'bold'}).setOrigin(.5);
-    this.treasureHint = this.add.container(0, 0, [treasureBg, treasureLabel, this.treasureHintArrow]).setDepth(9100).setAlpha(0);
+    this.treasureHint = this.add.container(0, 0, [treasureBg, treasureLabel, this.treasureHintArrow]).setDepth(worldDepth(0, WorldLayer.effect)).setAlpha(0);
     const exploreBg = this.add.rectangle(0, 0, 610, 54, 0x24140f, .95).setStrokeStyle(4, 0xf2c47a, .85);
     const openingTip = this.world.theme === 'farm'
       ? `${this.animal.foodIcon}  FIND ${this.requiredFood()} FARM FOODS  •  ${this.animal.actionLabel} TO REVEAL TREASURE`
@@ -381,7 +229,7 @@ export class MazeScene extends Phaser.Scene {
     const exploreText = this.add.text(0, 0, openingTip, {
       fontFamily:'Fredoka, sans-serif',fontSize:'19px',color:'#fff1ca',fontStyle:'bold'
     }).setOrigin(.5);
-    const exploreTip = this.add.container(640, 178, [exploreBg, exploreText]).setScrollFactor(0).setDepth(10003);
+    const exploreTip = this.add.container(640, 178, [exploreBg, exploreText]).setScrollFactor(0).setDepth(UiDepth.prompt);
     this.anchorUi(exploreTip, 640, 178);
     this.tweens.add({targets:exploreTip,alpha:0,y:'-=16',delay:5200,duration:700,onComplete:()=>exploreTip.destroy()});
     this.jumpPrompt = this.makePrompt('SPACE', 'JUMP', 0xf07954);
@@ -391,7 +239,7 @@ export class MazeScene extends Phaser.Scene {
   private makePrompt(key: string, label: string, color: number): Phaser.GameObjects.Container {
     const bg = this.add.rectangle(0, 0, 250, 62, 0x24140f, .98).setStrokeStyle(5, color, 1);
     const text = this.add.text(0, 0, `${key} — ${label}`, {fontFamily:'Fredoka, sans-serif',fontSize:'22px',color:'#fff6d8',fontStyle:'bold'}).setOrigin(.5);
-    const prompt = this.add.container(640, 640, [bg,text]).setScrollFactor(0).setDepth(10002).setAlpha(0);
+    const prompt = this.add.container(640, 640, [bg,text]).setScrollFactor(0).setDepth(UiDepth.prompt).setAlpha(0);
     this.anchorUi(prompt, 640, 640);
     return prompt;
   }
@@ -442,9 +290,9 @@ export class MazeScene extends Phaser.Scene {
   };
 
   private buildTouchControls(): void {
-    const base = this.add.circle(135, 575, 82, 0x2b1913, .65).setStrokeStyle(5, 0xffe2aa, .5).setScrollFactor(0).setDepth(11000)
+    const base = this.add.circle(135, 575, 82, 0x2b1913, .65).setStrokeStyle(5, 0xffe2aa, .5).setScrollFactor(0).setDepth(UiDepth.touchControl)
       .setInteractive({ useHandCursor: true });
-    const knob = this.add.circle(135, 575, 36, 0xffe1aa, .72).setScrollFactor(0).setDepth(11001);
+    const knob = this.add.circle(135, 575, 36, 0xffe1aa, .72).setScrollFactor(0).setDepth(UiDepth.touchContent);
     this.joystickKnob = knob; this.touchUi.push(base, knob); this.joystickUi.push(base, knob);
     this.anchorUi(base, 135, 575); this.anchorUi(knob, 135, 575);
     const updateStick = (pointer: Phaser.Input.Pointer) => {
@@ -462,7 +310,7 @@ export class MazeScene extends Phaser.Scene {
     this.input.on('pointerup', this.endTouchPointer, this);
     this.input.on('pointerupoutside', this.endTouchPointer, this);
     this.input.on('gameout', this.stopTouchMovement, this);
-    this.followMarker = this.add.circle(0, 0, 26, 0xffe2aa, .2).setStrokeStyle(4, 0xffe2aa, .65).setScrollFactor(0).setDepth(10999).setVisible(false);
+    this.followMarker = this.add.circle(0, 0, 26, 0xffe2aa, .2).setStrokeStyle(4, 0xffe2aa, .65).setScrollFactor(0).setDepth(UiDepth.touchMarker).setVisible(false);
     this.touchUi.push(this.followMarker);
     this.touchAction('jump', 1120, 570, 68, '🐾', 'JUMP', () => this.queued.jump = true, 0xd96545);
     this.touchAction('dig', 970, 625, 52, '🦴', 'DIG', () => this.queued.dig = true, 0x4f9275);
@@ -471,9 +319,9 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private touchAction(kind:'jump'|'dig'|'bark'|'pause',x:number,y:number,radius:number,icon:string,label:string,action:()=>void,color:number): void {
-    const circle = this.add.circle(x,y,radius,color,.82).setStrokeStyle(4,0xffedc5,.65).setScrollFactor(0).setDepth(11000).setInteractive({useHandCursor:true});
-    const iconText = this.add.text(x,y - (label ? 8 : 0),icon,{fontSize:`${Math.round(radius*.72)}px`,fontFamily:'Fredoka, sans-serif',fontStyle:'bold'}).setOrigin(.5).setScrollFactor(0).setDepth(11001);
-    const labelText = this.add.text(x,y+radius*.48,label,{fontSize:'13px',fontFamily:'Fredoka, sans-serif',fontStyle:'bold',color:'#fff1ca'}).setOrigin(.5).setScrollFactor(0).setDepth(11001);
+    const circle = this.add.circle(x,y,radius,color,.82).setStrokeStyle(4,0xffedc5,.65).setScrollFactor(0).setDepth(UiDepth.touchControl).setInteractive({useHandCursor:true});
+    const iconText = this.add.text(x,y - (label ? 8 : 0),icon,{fontSize:`${Math.round(radius*.72)}px`,fontFamily:'Fredoka, sans-serif',fontStyle:'bold'}).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.touchContent);
+    const labelText = this.add.text(x,y+radius*.48,label,{fontSize:'13px',fontFamily:'Fredoka, sans-serif',fontStyle:'bold',color:'#fff1ca'}).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.touchContent);
     circle.on('pointerdown',()=>{circle.setScale(.92);action();});
     circle.on('pointerup',()=>circle.setScale(1)); circle.on('pointerout',()=>circle.setScale(1));
     this.touchUi.push(circle,iconText,labelText);
@@ -563,9 +411,9 @@ export class MazeScene extends Phaser.Scene {
     let desired = new Phaser.Math.Vector2(moveX,moveY);
     if (desired.lengthSq()<.02) desired=this.lastMove.clone();
     let targetIndex = candidates[0]; let best=-Infinity;
-    const currentWorld=gridToWorld(node.path[node.index]);
+    const currentWorld=projectGridPoint(node.path[node.index]);
     candidates.forEach(index=>{
-      const world=gridToWorld(node.path[index]); const direction=new Phaser.Math.Vector2(world.x-currentWorld.x,world.y-currentWorld.y).normalize();
+      const world=projectGridPoint(node.path[index]); const direction=new Phaser.Math.Vector2(world.x-currentWorld.x,world.y-currentWorld.y).normalize();
       const dot=direction.dot(desired); if(dot>best){best=dot;targetIndex=index;}
     });
     const target=node.path[targetIndex]; this.busy=true; this.audio.jump();
@@ -618,8 +466,8 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private showTreasure(spot: ActiveDigSpot): void {
-    const world=gridToWorld(spot);
-    const card=this.add.container(world.x,world.y-90).setDepth(9000);
+    const world=projectGridPoint(spot);
+    const card=this.add.container(world.x,world.y-90).setDepth(worldDepth(world.y, WorldLayer.effect));
     const bg=this.add.rectangle(0,0,260,86,spot.treasure.kind==='pirate'?0x705023:0x342019,.95).setStrokeStyle(4,spot.treasure.kind==='pirate'?0xffdc61:0x82dfc4);
     const reward = spot.treasure.kind === 'pirate'
       ? this.add.image(-91, 0, 'burrow-atlas', 'env-14').setDisplaySize(72,72)
@@ -661,8 +509,8 @@ export class MazeScene extends Phaser.Scene {
     if (!target || target.spot.dug || time >= this.barkTreasureUntil) {
       this.barkTreasureTarget = undefined; this.treasureHint.setAlpha(0); return;
     }
-    const dogWorld = gridToWorld(this.player); const targetWorld = gridToWorld(target.spot);
-    this.treasureHint.setPosition(dogWorld.x, dogWorld.y - 155).setAlpha(1);
+    const dogWorld = projectGridPoint(this.player); const targetWorld = projectGridPoint(target.spot);
+    this.treasureHint.setPosition(dogWorld.x, dogWorld.y - 155).setDepth(worldDepth(dogWorld.y, WorldLayer.effect)).setAlpha(1);
     this.treasureHintArrow.setRotation(Math.atan2(targetWorld.y - dogWorld.y, targetWorld.x - dogWorld.x));
   }
 
@@ -674,8 +522,8 @@ export class MazeScene extends Phaser.Scene {
         if(view.definition.kind==='food')this.run.collectFood();
         else {const power=view.definition.power!;this.run.collectTreat(power,time);this.audio.power(power);this.showPowerLabel(power);}
         this.audio.pickup();this.updateScore();
-        const dogWorld = gridToWorld(this.player);
-        view.object.setDepth(9500);
+        const dogWorld = projectGridPoint(this.player);
+        view.object.setDepth(worldDepth(dogWorld.y, WorldLayer.effect));
         this.tweens.add({
           targets:view.object,x:dogWorld.x,y:dogWorld.y-35,scale:.25,alpha:0,duration:230,ease:'Back.in',
           onComplete:()=>view.object.setVisible(false)
@@ -686,7 +534,7 @@ export class MazeScene extends Phaser.Scene {
 
   private showPowerLabel(kind:PowerKind):void{
     const x=this.layout.safeX+640;const y=this.layout.safeY+145;
-    const label=this.add.text(x,y,POWERS[kind].label,{fontFamily:'Fredoka, sans-serif',fontSize:'40px',color:`#${POWERS[kind].color.toString(16).padStart(6,'0')}`,fontStyle:'bold',stroke:'#301a13',strokeThickness:7}).setOrigin(.5).setScrollFactor(0).setDepth(12000).setScale(.6);
+    const label=this.add.text(x,y,POWERS[kind].label,{fontFamily:'Fredoka, sans-serif',fontSize:'40px',color:`#${POWERS[kind].color.toString(16).padStart(6,'0')}`,fontStyle:'bold',stroke:'#301a13',strokeThickness:7}).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.announcement).setScale(.6);
     this.tweens.add({targets:label,scale:1,alpha:{from:1,to:0},y:y-30,duration:1300,ease:'Back.out',onComplete:()=>label.destroy()});
   }
 
@@ -699,8 +547,8 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private showHint():void{
-    const dogWorld=gridToWorld(this.player);const exitWorld=gridToWorld(this.level.exit);
-    this.hint.setPosition(dogWorld.x,dogWorld.y-115);
+    const dogWorld=projectGridPoint(this.player);const exitWorld=projectGridPoint(this.level.exit);
+    this.hint.setPosition(dogWorld.x,dogWorld.y-115).setDepth(worldDepth(dogWorld.y, WorldLayer.effect));
     const direction=new Phaser.Math.Vector2(exitWorld.x-dogWorld.x,exitWorld.y-dogWorld.y);
     const text=this.hint.getAt(1) as Phaser.GameObjects.Text;
     text.setText(`🏠  HOME IS THIS WAY  ${Math.abs(direction.x)>Math.abs(direction.y)?(direction.x>0?'➜':'⬅'):(direction.y>0?'⬇':'⬆')}`);
@@ -713,7 +561,9 @@ export class MazeScene extends Phaser.Scene {
     this.tileViews.forEach(tile=>{
       const distance=Phaser.Math.Distance.Between(this.player.x,this.player.y,tile.point.x,tile.point.y);
       if(distance<radius*.65)tile.discovered=true;
-      tile.object.setAlpha(this.profile.fullBrightness ? 1 : distance < radius ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035);
+      const baseAlpha = this.profile.fullBrightness ? 1 : distance < radius
+        ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035;
+      tile.object.setAlpha(baseAlpha);
     });
     const sniff=this.run.isPowerActive('sniff',now);
     this.collectibleViews.forEach(view=>{
@@ -771,13 +621,24 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private positionDog(time:number,moving:boolean):void{
-    const world=gridToWorld(this.player);this.dog.setPosition(world.x,world.y+this.player.jumpLift);
+    const world=projectGridPoint(this.player);
+    this.dog.setPosition(world.x,world.y+this.player.jumpLift)
+      .setDepth(worldDepth(world.y, WorldLayer.actor));
     if (!this.busy) {
       const desiredAnimation = moving ? `${this.animal.spriteKey}-run` : `${this.animal.spriteKey}-idle`;
       if (this.dogSprite.anims.currentAnim?.key !== desiredAnimation) this.dogSprite.play(desiredAnimation, true);
     }
     this.dogSprite.y = -30 + (this.animal.groundOffsetY ?? 0) + (moving && !this.busy ? Math.sin(time * .018) * 2 : 0);
     if(this.lastMove.x<-.08)this.dogSprite.setFlipX(true);else if(this.lastMove.x>.08)this.dogSprite.setFlipX(false);
+    const occludingGroups = this.wallOcclusionGroups.filter(group => group.members.some(member =>
+      member.object.depth > this.dog.depth
+      && Phaser.Math.Distance.Between(this.player.x,this.player.y,member.point.x,member.point.y) < ACTOR_OCCLUDER_DISTANCE
+    ));
+    const overlayDepth = actorOverlayDepth(occludingGroups.flatMap(group => group.members.map(member => member.object.depth)));
+    this.dogOcclusionSprite.setPosition(world.x, world.y + this.player.jumpLift + this.dogSprite.y)
+      .setFrame(this.dogSprite.frame.name).setFlipX(this.dogSprite.flipX)
+      .setVisible(overlayDepth !== undefined);
+    if (overlayDepth !== undefined) this.dogOcclusionSprite.setDepth(overlayDepth);
   }
 
   private checkExit():void{
@@ -799,7 +660,7 @@ export class MazeScene extends Phaser.Scene {
     const x=this.layout.safeX+640;const y=this.layout.safeY+555;
     const bg=this.add.rectangle(0,0,520,76,0x351c14,.98).setStrokeStyle(5,0xffd65f,1);
     const text=this.add.text(0,0,`${this.animal.foodIcon}  FIND ${remaining} MORE ${remaining===1?'SNACK':'SNACKS'} FIRST!`,{fontFamily:'Fredoka, sans-serif',fontSize:'25px',color:'#fff4bd',fontStyle:'bold'}).setOrigin(.5);
-    const notice=this.add.container(x,y,[bg,text]).setScrollFactor(0).setDepth(13000).setScale(.75).setAlpha(0);
+    const notice=this.add.container(x,y,[bg,text]).setScrollFactor(0).setDepth(UiDepth.modal).setScale(.75).setAlpha(0);
     this.tweens.add({targets:notice,scale:{from:.75,to:1},alpha:{from:0,to:1},duration:220,ease:'Back.out',hold:1700,yoyo:true,onComplete:()=>notice.destroy()});
   }
 }

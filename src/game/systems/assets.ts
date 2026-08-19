@@ -1,7 +1,7 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import type { MapId } from '../types';
 
-interface GridAsset {
+export interface GridAsset {
   key: string;
   url: string;
   prefix: string;
@@ -17,7 +17,7 @@ const HOUSEHOLD: GridAsset = { key: 'household-treasures', url: 'assets/househol
 const FARM: GridAsset = { key: 'farm-atlas', url: 'assets/farm-atlas.webp', prefix: 'farm', columns: 4, rows: 4 };
 const FARM_TREASURES: GridAsset = { key: 'farm-treasures', url: 'assets/farm-treasures.webp', prefix: 'farm-treasure', columns: 4, rows: 2 };
 
-const ALL_GRID_ASSETS = [PIP, BUNNY, RABBIT, BURROW, HOUSEHOLD, FARM, FARM_TREASURES];
+export const GRID_ASSETS: readonly GridAsset[] = [PIP, BUNNY, RABBIT, BURROW, HOUSEHOLD, FARM, FARM_TREASURES];
 
 function queue(scene: Phaser.Scene, asset: GridAsset): void {
   if (!scene.textures.exists(asset.key)) scene.load.image(asset.key, asset.url);
@@ -86,7 +86,7 @@ function createAnimalAnimations(scene: Phaser.Scene, texture: string, prefix: st
 }
 
 export function registerLoadedAssets(scene: Phaser.Scene): void {
-  ALL_GRID_ASSETS.forEach(asset => registerGridFrames(scene, asset));
+  GRID_ASSETS.forEach(asset => registerGridFrames(scene, asset));
   createAnimalAnimations(scene, PIP.key, PIP.prefix);
   createAnimalAnimations(scene, BUNNY.key, BUNNY.prefix);
 }

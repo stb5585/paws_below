@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_PROFILE, PROFILE_KEY, addDiscoveries, loadProfile, sanitizeProfile, saveProfile } from '../src/game/systems/profile';
+import {
+  DEFAULT_PROFILE, PROFILE_KEY, addDiscoveries, loadProfile, resetBestScores,
+  sanitizeProfile, saveProfile
+} from '../src/game/systems/profile';
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -59,5 +62,49 @@ describe('player profile', () => {
     const empty = { getItem: () => null };
     const first = loadProfile(empty); first.bestScores['cream-bunny'] = 999;
     expect(loadProfile(empty).bestScores['cream-bunny']).toBe(0);
+  });
+
+  it('adds versioned per-animal appearance defaults to existing saves', () => {
+    const oldSave = { ...DEFAULT_PROFILE } as Partial<typeof DEFAULT_PROFILE>;
+    delete oldSave.appearance;
+    const migrated = sanitizeProfile(oldSave);
+    expect(migrated.appearance).toEqual(DEFAULT_PROFILE.appearance);
+    expect(migrated.appearance).not.toBe(DEFAULT_PROFILE.appearance);
+    expect(migrated.appearance.animals['white-dog'].extras).not.toBe(DEFAULT_PROFILE.appearance.animals['white-dog'].extras);
+  });
+
+  it('sanitizes appearance identifiers and preserves valid cosmetic slots', () => {
+    const profile = sanitizeProfile({
+      ...DEFAULT_PROFILE,
+      appearance: {
+        version: 1,
+        animals: {
+          'white-dog': {
+            palette: 'warm-gold', homeStyle: '<script>',
+            extras: { collar: 'mint-stars', '<bad>': 'nope' }
+          }
+        }
+      }
+    });
+    expect(profile.appearance.animals['white-dog']).toEqual({
+      palette: 'warm-gold', homeStyle: 'classic-doghouse', extras: { collar: 'mint-stars' }
+    });
+  });
+
+  it('resets only aggregate and per-animal best scores', () => {
+    const profile = sanitizeProfile({
+      ...DEFAULT_PROFILE, bestScore: 900, bestScores: { 'white-dog': 900, 'cream-bunny': 450 },
+      collection: ['striped-sock'], pirateBadge: true, muted: true,
+      appearance: { version: 1, animals: { 'white-dog': {
+        palette: 'warm-gold', homeStyle: 'classic-doghouse', extras: { collar: 'mint-stars' }
+      } } }
+    });
+    const reset = resetBestScores(profile);
+    expect(reset.bestScore).toBe(0);
+    expect(reset.bestScores).toEqual({ 'white-dog': 0, 'cream-bunny': 0 });
+    expect(reset.collection).toEqual(['striped-sock']);
+    expect(reset.pirateBadge).toBe(true);
+    expect(reset.muted).toBe(true);
+    expect(reset.appearance).toEqual(profile.appearance);
   });
 });

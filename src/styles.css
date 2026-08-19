@@ -86,6 +86,4 @@ body {
 #rotate-message strong { font-size: clamp(1.4rem, 7vw, 2.5rem); }
 #rotate-message span:last-child { opacity: .8; }
 @keyframes turn { 50% { transform: rotate(90deg); } }
-@media (orientation: portrait) and (any-pointer: coarse) {
-  #rotate-message { display: flex; }
-}
+#rotate-message[data-visible="true"] { display: flex; }
