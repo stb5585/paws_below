@@ -14,20 +14,21 @@ import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
 import { ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
-import { EnvironmentRenderer, type EnvironmentOcclusionGroup, type EnvironmentView } from '../rendering/EnvironmentRenderer';
+import { EnvironmentRenderer, crossingAssetForPoint, type EnvironmentOcclusionGroup, type EnvironmentView } from '../rendering/EnvironmentRenderer';
 
-interface PlayerModel extends GridPoint { jumpLift: number }
+interface PlayerModel extends GridPoint { jumpLift: number; surfaceLift: number }
 interface CollectibleView { definition: CollectibleDefinition; object: Phaser.GameObjects.Container; collected: boolean }
 interface DigView { spot: ActiveDigSpot; object: Phaser.GameObjects.Container }
 interface UiAnchor { object: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform; x: number; y: number }
 interface TouchTarget { circle: Phaser.GameObjects.Arc; x: number; y: number; radius: number }
 
 export class MazeScene extends Phaser.Scene {
-  private player: PlayerModel = { ...BURROW.start, jumpLift: 0 };
+  private player: PlayerModel = { ...BURROW.start, jumpLift: 0, surfaceLift: 0 };
   private animal: AnimalDefinition = DOG;
   private level: LevelDefinition = BURROW;
   private world: WorldDefinition = UNDERGROUND_WORLD;
   private dog!: Phaser.GameObjects.Container;
+  private dogShadow!: Phaser.GameObjects.Ellipse;
   private dogSprite!: Phaser.GameObjects.Sprite;
   private dogOcclusionSprite!: Phaser.GameObjects.Sprite;
   private barkBubble!: Phaser.GameObjects.Text;
@@ -78,7 +79,7 @@ export class MazeScene extends Phaser.Scene {
     this.level = getLevelForAnimal(this.animal.id, this.profile.selectedMapId);
     this.world = getWorld(this.level.mapId);
     this.audio = this.registry.get('soundscape') as Soundscape;
-    this.player = { ...this.level.start, jumpLift: 0 };
+    this.player = { ...this.level.start, jumpLift: 0, surfaceLift: 0 };
     this.run = new RunState();
     this.tileViews = []; this.wallOcclusionGroups = []; this.collectibleViews = []; this.digViews = [];
     this.visited.clear(); this.busy = false; this.finished = false;
@@ -180,12 +181,12 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private createDog(): void {
-    const shadow = this.add.ellipse(0, 18, 78, 25, 0x100907, .52);
+    this.dogShadow = this.add.ellipse(0, 18, 78, 25, 0x100907, .52);
     const spriteSize = 128 * (this.animal.gameScale ?? 1);
     this.dogSprite = this.add.sprite(0, -30 + (this.animal.groundOffsetY ?? 0), this.animal.spriteTexture, `${this.animal.spriteKey}-14`).setDisplaySize(spriteSize,spriteSize);
     this.dogSprite.play(`${this.animal.spriteKey}-idle`);
     const startWorld=projectGridPoint(this.player);
-    this.dog = this.add.container(0, 0, [shadow, this.dogSprite]).setDepth(worldDepth(startWorld.y, WorldLayer.actor));
+    this.dog = this.add.container(0, 0, [this.dogShadow, this.dogSprite]).setDepth(worldDepth(startWorld.y, WorldLayer.actor));
     this.dogOcclusionSprite = this.add.sprite(0, 0, this.animal.spriteTexture, `${this.animal.spriteKey}-14`)
       .setDisplaySize(spriteSize, spriteSize).setAlpha(ACTOR_OCCLUSION_ALPHA).setVisible(false);
     this.barkBubble = this.add.text(0, -105, 'WOOF!', {
@@ -377,8 +378,9 @@ export class MazeScene extends Phaser.Scene {
   }
 
   private movePlayer(moveX: number, moveY: number, time: number, delta: number): void {
-    if (!moveX && !moveY || this.onStone()) return;
+    if (!moveX && !moveY) return;
     this.lastMove.set(moveX,moveY).normalize();
+    if (this.onCrossing()) return;
     let dx = moveX + moveY; let dy = moveY - moveX;
     const length = Math.hypot(dx,dy); dx/=length; dy/=length;
     const multiplier = this.run.isPowerActive('zoomie', time) ? ZOOMIE_SPEED_MULTIPLIER : 1;
@@ -392,8 +394,18 @@ export class MazeScene extends Phaser.Scene {
     return this.world.isFloorCell(Math.round(x), Math.round(y));
   }
 
-  private onStone(): boolean {
-    return this.world.jumpPaths.flat().some(point => this.world.isObstacleCell(point.x,point.y) && Phaser.Math.Distance.Between(this.player.x,this.player.y,point.x,point.y) < .35);
+  private crossingAt(point: GridPoint): { point: GridPoint; standingLift: number } | undefined {
+    const crossing = this.world.jumpPaths.flat().find(candidate => this.world.isObstacleCell(candidate.x,candidate.y)
+      && Phaser.Math.Distance.Between(point.x,point.y,candidate.x,candidate.y) < .35);
+    if (!crossing) return undefined;
+    return { point: crossing, standingLift: crossingAssetForPoint(this.world, crossing)?.standingLift ?? 0 };
+  }
+
+  private onCrossing(): boolean { return !!this.crossingAt(this.player); }
+
+  private surfaceLiftAt(point: GridPoint): number {
+    const lift = this.crossingAt(point)?.standingLift ?? 0;
+    return lift ? -lift : 0;
   }
 
   private nearbyJumpNode(): { path: GridPoint[]; index: number } | undefined {
@@ -416,9 +428,11 @@ export class MazeScene extends Phaser.Scene {
       const world=projectGridPoint(node.path[index]); const direction=new Phaser.Math.Vector2(world.x-currentWorld.x,world.y-currentWorld.y).normalize();
       const dot=direction.dot(desired); if(dot>best){best=dot;targetIndex=index;}
     });
-    const target=node.path[targetIndex]; this.busy=true; this.audio.jump();
+    const target=node.path[targetIndex]; const targetSurfaceLift=this.surfaceLiftAt(target); this.busy=true; this.audio.jump();
     this.dogSprite.play(`${this.animal.spriteKey}-jump`, true);
-    this.tweens.add({targets:this.player,x:target.x,y:target.y,duration:430,ease:'Sine.inOut',onComplete:()=>{this.player.x=target.x;this.player.y=target.y;this.busy=false;}});
+    this.tweens.add({targets:this.player,x:target.x,y:target.y,surfaceLift:targetSurfaceLift,duration:430,ease:'Sine.inOut',onComplete:()=>{
+      this.player.x=target.x;this.player.y=target.y;this.player.surfaceLift=targetSurfaceLift;this.busy=false;
+    }});
     this.tweens.add({targets:this.player,jumpLift:-48,duration:215,yoyo:true,ease:'Sine.out'});
   }
 
@@ -443,8 +457,8 @@ export class MazeScene extends Phaser.Scene {
     this.busy=true; this.audio.jump();
     this.dogSprite.play(`${this.animal.spriteKey}-jump`, true);
     if (clearLanding) {
-      this.tweens.add({targets:this.player,x:target.x,y:target.y,duration:430,ease:'Sine.inOut',onComplete:()=>{
-        this.player.x=target.x;this.player.y=target.y;this.busy=false;
+      this.tweens.add({targets:this.player,x:target.x,y:target.y,surfaceLift:0,duration:430,ease:'Sine.inOut',onComplete:()=>{
+        this.player.x=target.x;this.player.y=target.y;this.player.surfaceLift=0;this.busy=false;
       }});
       this.tweens.add({targets:this.player,jumpLift:-38,duration:215,yoyo:true,ease:'Sine.out'});
       return;
@@ -622,20 +636,23 @@ export class MazeScene extends Phaser.Scene {
 
   private positionDog(time:number,moving:boolean):void{
     const world=projectGridPoint(this.player);
-    this.dog.setPosition(world.x,world.y+this.player.jumpLift)
+    if (!this.busy) this.player.surfaceLift = this.surfaceLiftAt(this.player);
+    this.dog.setPosition(world.x,world.y)
       .setDepth(worldDepth(world.y, WorldLayer.actor));
     if (!this.busy) {
       const desiredAnimation = moving ? `${this.animal.spriteKey}-run` : `${this.animal.spriteKey}-idle`;
       if (this.dogSprite.anims.currentAnim?.key !== desiredAnimation) this.dogSprite.play(desiredAnimation, true);
     }
-    this.dogSprite.y = -30 + (this.animal.groundOffsetY ?? 0) + (moving && !this.busy ? Math.sin(time * .018) * 2 : 0);
+    this.dogShadow.y = 18 + this.player.surfaceLift;
+    this.dogSprite.y = -30 + (this.animal.groundOffsetY ?? 0) + this.player.surfaceLift + this.player.jumpLift
+      + (moving && !this.busy ? Math.sin(time * .018) * 2 : 0);
     if(this.lastMove.x<-.08)this.dogSprite.setFlipX(true);else if(this.lastMove.x>.08)this.dogSprite.setFlipX(false);
     const occludingGroups = this.wallOcclusionGroups.filter(group => group.members.some(member =>
       member.object.depth > this.dog.depth
       && Phaser.Math.Distance.Between(this.player.x,this.player.y,member.point.x,member.point.y) < ACTOR_OCCLUDER_DISTANCE
     ));
     const overlayDepth = actorOverlayDepth(occludingGroups.flatMap(group => group.members.map(member => member.object.depth)));
-    this.dogOcclusionSprite.setPosition(world.x, world.y + this.player.jumpLift + this.dogSprite.y)
+    this.dogOcclusionSprite.setPosition(world.x, world.y + this.dogSprite.y)
       .setFrame(this.dogSprite.frame.name).setFlipX(this.dogSprite.flipX)
       .setVisible(overlayDepth !== undefined);
     if (overlayDepth !== undefined) this.dogOcclusionSprite.setDepth(overlayDepth);

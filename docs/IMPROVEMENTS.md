@@ -58,6 +58,8 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 - Added shared ground-contact depth helpers and named ground, world, and UI layers; floor surfaces remain below every actor while walls and props sort by ground contact.
 - Actors now change depth from their ground position rather than using a fixed depth.
 - Walls remain solid and unchanged; when a connected section occludes the animal, a synchronized translucent animal overlay preserves readability without wall transparency seams.
+- Corrected the farm fence's atlas role, southwest–northeast orientation, two-cell footprint, and forward-cell depth anchor so adjacent corn cannot clip it.
+- Crossings now define a standing height: the animal and shadow rest on top of rocks and hay bales, and directional input can turn the animal before the next jump.
 - Walls, stepping stones, collectibles, effects, decor, and exit elements use the same ordering model.
 - Removed duplicate rendering of blocked underground cells.
 - Included underground decor in the lighting visibility set.

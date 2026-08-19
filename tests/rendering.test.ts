@@ -51,4 +51,23 @@ describe('isometric rendering order', () => {
       expect(asset.footprint.height, asset.id).toBeGreaterThan(0);
     });
   });
+
+  it('treats the farm fence as a flipped two-cell prop with forward depth', () => {
+    const fence = ENVIRONMENT_ASSETS['farm-boundary-fence'];
+    expect(fence.frame).toBe('farm-5');
+    expect(fence.flipX).toBe(true);
+    expect(fence.footprint).toEqual({ width: 1, height: 2 });
+    expect(fence.placementOffset).toEqual({ x: 0, y: .5 });
+    expect(fence.depthOffset).toEqual({ x: 0, y: 1 });
+    expect(fence.displaySize).toBeGreaterThan(GAME_PROJECTION.tileWidth);
+  });
+
+  it('uses hay bales with explicit standing height for every farm crossing variant', () => {
+    ['farm-stone-a', 'farm-stone-b'].forEach(id => {
+      const crossing = ENVIRONMENT_ASSETS[id as 'farm-stone-a' | 'farm-stone-b'];
+      expect(crossing.frame).toBe('farm-4');
+      expect(crossing.standingLift).toBeGreaterThan(0);
+    });
+    expect(ENVIRONMENT_ASSETS['burrow-stone'].standingLift).toBeGreaterThan(0);
+  });
 });

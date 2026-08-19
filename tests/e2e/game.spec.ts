@@ -483,7 +483,8 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
       .map((point: any) => `${point.x},${point.y}`));
     const crossings = images.filter((view: any) => crossingKeys.has(`${view.point.x},${view.point.y}`)
-      && ['farm-4', 'farm-5'].includes(view.object.frame.name));
+      && view.object.frame.name === 'farm-4');
+    const fences = images.filter((view: any) => view.object.frame.name === 'farm-5');
     const blockCounts = scene.world.blocks.flatMap((block: any) => {
       const counts: number[] = [];
       for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
@@ -496,13 +497,72 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       expectedCrossings: crossingKeys.size,
       everyBlockOnce: blockCounts.every((count: number) => count === 1),
       grassAnchorY: images.find((view: any) => view.object.frame.name === 'farm-0')?.object.originY,
-      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length
+      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length,
+      fences: fences.map((view: any) => ({ width: view.object.displayWidth, flipX: view.object.flipX }))
     };
   });
   expect(farmFixture).toEqual(expect.objectContaining({
     crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
+  expect(farmFixture.fences.length).toBeGreaterThan(0);
+  expect(farmFixture.fences.every((fence: any) => fence.width === 160 && fence.flipX)).toBe(true);
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas' && view.object.frame?.name === 'farm-5');
+    scene.cameras.main.centerOn(fence.object.x, fence.object.y);
+  });
+  await page.screenshot({path:testInfo.outputPath('farm-fence.png')});
+  const crossingPose = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 11; scene.player.y = 8; scene.player.jumpLift = 0; scene.player.surfaceLift = 0;
+    scene.positionDog(0, false);
+    const before = { x: scene.player.x, y: scene.player.y };
+    scene.movePlayer(-1, 0, 0, 16);
+    scene.positionDog(0, false);
+    return {
+      before, after: { x: scene.player.x, y: scene.player.y }, surfaceLift: scene.player.surfaceLift,
+      spriteY: scene.dogSprite.y, shadowY: scene.dogShadow.y,
+      overlayAligned: !scene.dogOcclusionSprite.visible || scene.dogOcclusionSprite.y === scene.dog.y + scene.dogSprite.y,
+      facingLeft: scene.dogSprite.flipX, frame: scene.tileViews.find((view: any) => view.point.x === 11 && view.point.y === 8
+        && view.object.texture?.key === 'farm-atlas' && view.object.frame?.name === 'farm-4')?.object.frame.name
+    };
+  });
+  expect(crossingPose).toEqual({
+    before: { x: 11, y: 8 }, after: { x: 11, y: 8 }, surfaceLift: -22,
+    spriteY: -60, shadowY: -4, overlayAligned: true, facingLeft: true, frame: 'farm-4'
+  });
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 11; scene.player.y = 7; scene.player.jumpLift = 0; scene.player.surfaceLift = 0; scene.busy = false;
+    scene.positionDog(0, false); scene.tryJump(-1, .5);
+  });
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  const landing = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    return {
+      x: scene.player.x, y: scene.player.y, surfaceLift: scene.player.surfaceLift,
+      shadowY: scene.dogShadow.y,
+      overlayAligned: !scene.dogOcclusionSprite.visible || scene.dogOcclusionSprite.y === scene.dog.y + scene.dogSprite.y
+    };
+  });
+  expect(landing.x).toBeCloseTo(11, 3); expect(landing.y).toBeCloseTo(8, 3);
+  expect(landing).toEqual(expect.objectContaining({ surfaceLift: -22, shadowY: -4, overlayAligned: true }));
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.movePlayer(1, 0, 0, 16); scene.tryJump(0, 0);
+  });
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  const turnedLanding = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    return { x: scene.player.x, y: scene.player.y, surfaceLift: scene.player.surfaceLift, facingLeft: scene.dogSprite.flipX };
+  });
+  expect(turnedLanding.x).toBeCloseTo(11, 3); expect(turnedLanding.y).toBeCloseTo(7, 3);
+  expect(turnedLanding.surfaceLift).toBe(0); expect(turnedLanding.facingLeft).toBe(false);
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+  });
   await page.screenshot({path:testInfo.outputPath('farm-map.png')});
 });
 

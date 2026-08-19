@@ -34,6 +34,13 @@ export function assetForWall(world: WorldDefinition, point: GridPoint, isBlock: 
     ?? world.rendering.wallAsset;
 }
 
+export function crossingAssetForPoint(world: WorldDefinition, point: GridPoint): ProjectedSpriteAsset | undefined {
+  const pathIndex = world.jumpPaths.findIndex(path => path.some(candidate => pointKey(candidate) === pointKey(point)));
+  if (pathIndex < 0) return undefined;
+  const choices = world.rendering.crossingAssets;
+  return ENVIRONMENT_ASSETS[choices[pathIndex % choices.length]];
+}
+
 export class EnvironmentRenderer {
   private readonly views: EnvironmentView[] = [];
   private readonly groups: EnvironmentOcclusionGroup[] = [];
@@ -148,9 +155,8 @@ export class EnvironmentRenderer {
   }
 
   private drawCrossing(point: GridPoint): void {
-    const pathIndex = this.world.jumpPaths.findIndex(path => path.some(candidate => pointKey(candidate) === pointKey(point)));
-    const choices = this.world.rendering.crossingAssets;
-    const definition = ENVIRONMENT_ASSETS[choices[Math.max(0, pathIndex) % choices.length]];
+    const definition = crossingAssetForPoint(this.world, point);
+    if (!definition) return;
     const image = placeProjectedSprite(this.scene, point, definition, { depth: GroundDepth.detail });
     this.track(point, [image]);
   }
