@@ -3,7 +3,7 @@ import {
   GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
   actorOverlayDepth, diamondPoints, projectGridPoint, worldDepth
 } from '../src/game/systems/rendering';
-import { ENVIRONMENT_ASSETS, placementForWallSpan } from '../src/game/rendering/catalog';
+import { ENVIRONMENT_ASSETS, placementForWallSpan, wallInsetTowardGround } from '../src/game/rendering/catalog';
 
 describe('isometric rendering order', () => {
   it('keeps the complete floor below y-sorted actors', () => {
@@ -73,6 +73,15 @@ describe('isometric rendering order', () => {
     });
     expect(placementForWallSpan({ x: 3, y: 4 }, { x: 2, y: 4 }).depthOffset).toEqual({ x: 0, y: 0 });
     expect(() => placementForWallSpan({ x: 3, y: 4 }, { x: 5, y: 4 })).toThrow();
+  });
+
+  it('anchors outside walls halfway toward their neighboring ground', () => {
+    expect(wallInsetTowardGround([{ x: 0, y: 1 }])).toEqual({ x: 0, y: .5 });
+    expect(wallInsetTowardGround([{ x: -1, y: 0 }])).toEqual({ x: -.5, y: 0 });
+    expect(wallInsetTowardGround([{ x: 1, y: 0 }, { x: 0, y: 1 }])).toEqual({ x: .25, y: .25 });
+    expect(wallInsetTowardGround([{ x: 1, y: 0 }, { x: -1, y: 0 }])).toEqual({ x: 0, y: 0 });
+    expect(wallInsetTowardGround([])).toEqual({ x: 0, y: 0 });
+    expect(() => wallInsetTowardGround([{ x: 1, y: 1 }])).toThrow();
   });
 
   it('uses hay bales with explicit standing height for every farm crossing variant', () => {

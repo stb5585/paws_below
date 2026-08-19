@@ -3,7 +3,7 @@ import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
 import { diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
-  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan,
+  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan, wallInsetTowardGround,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
 } from './catalog';
 
@@ -246,8 +246,17 @@ export class EnvironmentRenderer {
     });
     fencePlacements.forEach(({ from, to, group }) => {
       const placement = placementForWallSpan(from, to);
-      const image = placeProjectedSprite(this.scene, from, ENVIRONMENT_ASSETS['farm-boundary-fence'], placement);
-      const midpoint = { x: from.x + placement.placementOffset.x, y: from.y + placement.placementOffset.y };
+      const fromInset = this.boundaryWallInset(from);
+      const toInset = this.boundaryWallInset(to);
+      const inset = { x: (fromInset.x + toInset.x) / 2, y: (fromInset.y + toInset.y) / 2 };
+      const placementOffset = {
+        x: placement.placementOffset.x + inset.x, y: placement.placementOffset.y + inset.y
+      };
+      const depthOffset = { x: placement.depthOffset.x + inset.x, y: placement.depthOffset.y + inset.y };
+      const image = placeProjectedSprite(this.scene, from, ENVIRONMENT_ASSETS['farm-boundary-fence'], {
+        ...placement, placementOffset, depthOffset
+      });
+      const midpoint = { x: from.x + placementOffset.x, y: from.y + placementOffset.y };
       this.track(midpoint, [image], true, group, [from, to]);
     });
     sortedWallKeys.forEach(key => {
@@ -256,14 +265,28 @@ export class EnvironmentRenderer {
       const point = { x, y };
       const assetId = assetForWall(this.world, point, blocks.has(key));
       const definition = ENVIRONMENT_ASSETS[assetId === 'farm-boundary-fence' ? this.world.rendering.wallAsset : assetId];
-      const image = placeProjectedSprite(this.scene, point, definition);
-      this.track(point, [image], true, wallGroups.get(key), [point]);
+      const inset = blocks.has(key) ? { x: 0, y: 0 } : this.boundaryWallInset(point);
+      const image = placeProjectedSprite(this.scene, point, definition, {
+        placementOffset: inset, depthOffset: inset
+      });
+      this.track({ x: point.x + inset.x, y: point.y + inset.y }, [image], true, wallGroups.get(key), [point]);
     });
     new Set(wallGroups.values()).forEach(groupId => {
       const members = this.views.filter(view => view.occlusionGroup === groupId);
       if (!members.length) return;
       this.groups.push({ id: groupId, members });
     });
+  }
+
+  private boundaryWallInset(point: GridPoint): GridPoint {
+    const directions = [
+      { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
+    ].filter(direction => {
+      const x = point.x + direction.x;
+      const y = point.y + direction.y;
+      return this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y);
+    });
+    return wallInsetTowardGround(directions);
   }
 
   private drawDecor(item: WorldPropPlacement): void {

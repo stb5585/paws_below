@@ -59,6 +59,7 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 - Actors now change depth from their ground position rather than using a fixed depth.
 - Walls remain solid and unchanged; when a connected section occludes the animal, a synchronized translucent animal overlay preserves readability without wall transparency seams.
 - Farm fences now derive their orientation, midpoint, and depth anchor from the two boundary cells they replace. Both diagonal wall directions use the same asset with placement-specific flipping, and the complete two-cell span is reserved so corn cannot overlap the fence or shift the apparent row alignment.
+- Boundary walls now anchor at the shared edge of playable ground instead of the center of an outside grid cell. The placement closes the divergent seam in both maps while internal obstacle walls remain centered on their collision cells.
 - Crossings now define a standing height: the animal and shadow rest on top of rocks and hay bales, and directional input can turn the animal before the next jump.
 - Walls, stepping stones, collectibles, effects, decor, and exit elements use the same ordering model.
 - Removed duplicate rendering of blocked underground cells.

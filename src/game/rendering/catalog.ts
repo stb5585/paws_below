@@ -102,6 +102,20 @@ export function placementForWallSpan(from: GridPoint, to: GridPoint): WallSpanPl
   };
 }
 
+/** Moves an outside boundary wall halfway toward the playable cells it borders. */
+export function wallInsetTowardGround(directions: readonly GridPoint[]): GridPoint {
+  if (!directions.length) return { x: 0, y: 0 };
+  directions.forEach(direction => {
+    if (Math.abs(direction.x) + Math.abs(direction.y) !== 1) {
+      throw new Error('A wall inset direction must identify one adjacent grid cell');
+    }
+  });
+  return {
+    x: directions.reduce((sum, direction) => sum + direction.x, 0) / directions.length / 2,
+    y: directions.reduce((sum, direction) => sum + direction.y, 0) / directions.length / 2
+  };
+}
+
 export interface WorldPropPlacement extends GridPoint {
   asset: EnvironmentAssetId;
   size?: number;
