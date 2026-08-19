@@ -61,7 +61,7 @@ export const ENVIRONMENT_ASSETS: Readonly<Record<EnvironmentAssetId, ProjectedSp
   'farm-landmark': asset('farm-landmark', 'farm-atlas', 'farm-3', 138, .812, { width: 2, height: 2 }),
   'farm-stone-a': asset('farm-stone-a', 'farm-atlas', 'farm-4', 76, .697, { width: 1, height: 1 }, { standingLift: 22 }),
   'farm-stone-b': asset('farm-stone-b', 'farm-atlas', 'farm-4', 76, .697, { width: 1, height: 1 }, { standingLift: 22, flipX: true }),
-  'farm-boundary-fence': asset('farm-boundary-fence', 'farm-atlas', 'farm-5', 160, .92, { width: 2, height: 1 }),
+  'farm-boundary-fence': asset('farm-boundary-fence', 'farm-atlas', 'farm-5', 160, .83, { width: 2, height: 1 }),
   'farm-sign': asset('farm-sign', 'farm-atlas', 'farm-7', 72, .92),
   'farm-border-detail': asset('farm-border-detail', 'farm-atlas', 'farm-13', 118, .763),
   'farm-flowers': asset('farm-flowers', 'farm-atlas', 'farm-14', 66, .92),

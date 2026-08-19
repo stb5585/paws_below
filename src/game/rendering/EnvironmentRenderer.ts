@@ -283,7 +283,7 @@ export class EnvironmentRenderer {
       const point = { x, y };
       const assetId = assetForWall(this.world, point, blocks.has(key));
       const definition = ENVIRONMENT_ASSETS[assetId === 'farm-boundary-fence' ? this.world.rendering.wallAsset : assetId];
-      const inset = blocks.has(key) ? { x: 0, y: 0 } : this.boundaryWallInset(point);
+      const inset = this.boundaryWallInset(point);
       const image = placeProjectedSprite(this.scene, point, definition, {
         placementOffset: inset, depthOffset: inset
       });

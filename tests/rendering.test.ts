@@ -75,6 +75,7 @@ describe('isometric rendering order', () => {
     expect(fence.footprint).toEqual({ width: 2, height: 1 });
     expect(fence.placementOffset).toBeUndefined();
     expect(fence.depthOffset).toBeUndefined();
+    expect(fence.groundAnchor.y).toBe(.83);
     expect(fence.displaySize).toBeGreaterThan(GAME_PROJECTION.tileWidth);
   });
 

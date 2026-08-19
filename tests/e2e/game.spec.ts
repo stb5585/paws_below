@@ -518,6 +518,20 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     });
     const backFence = fences.find((view: any) => view.coveredPoints.every((point: any) => point.y === 1));
     const sideFence = fences.find((view: any) => view.coveredPoints.every((point: any) => point.x === 1));
+    const blockWalls = images.filter((view: any) => view.object.frame.name === 'farm-1'
+      && view.coveredPoints?.length === 1 && scene.world.blocks.some((block: any) =>
+        view.coveredPoints[0].x >= block.x && view.coveredPoints[0].x < block.x + block.width
+        && view.coveredPoints[0].y >= block.y && view.coveredPoints[0].y < block.y + block.height));
+    const exposedBlockWallsAligned = blockWalls.every((view: any) => {
+      const point = view.coveredPoints[0];
+      const directions = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(direction =>
+        scene.world.isFloorCell(point.x + direction.x, point.y + direction.y)
+        || scene.world.isObstacleCell(point.x + direction.x, point.y + direction.y));
+      if (!directions.length) return view.point.x === point.x && view.point.y === point.y;
+      const expectedX = point.x + directions.reduce((sum: number, direction: any) => sum + direction.x, 0) / directions.length / 2;
+      const expectedY = point.y + directions.reduce((sum: number, direction: any) => sum + direction.y, 0) / directions.length / 2;
+      return view.point.x === expectedX && view.point.y === expectedY;
+    });
     return {
       crossings: crossings.length,
       expectedCrossings: crossingKeys.size,
@@ -529,6 +543,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       everyFenceGrounded: fences.every((view: any) => view.coveredPoints.every((point: any) =>
         images.some((candidate: any) => candidate.point.x === point.x && candidate.point.y === point.y
           && candidate.object.frame.name === 'farm-0'))),
+      exposedBlockWallsAligned,
       bottomWallCollision: {
         inside: scene.canOccupy(14, 21.19), outside: scene.canOccupy(14, 21.21)
       },
@@ -543,7 +558,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
   });
   expect(farmFixture).toEqual(expect.objectContaining({
     crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1,
-    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true,
+    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true, exposedBlockWallsAligned: true,
     bottomWallCollision: { inside: true, outside: false }
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
