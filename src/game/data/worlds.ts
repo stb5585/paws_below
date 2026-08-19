@@ -56,7 +56,7 @@ export const FARM_WORLD: WorldDefinition = {
   rendering: {
     floorAsset:'farm-grass',wallAsset:'farm-corn',blockAsset:'farm-corn',crossingAssets:['farm-stone-a','farm-stone-b'],
     borderVariants:[
-      {asset:'farm-hay',modulus:17,remainder:0},
+      {asset:'farm-boundary-fence',modulus:17,remainder:0},
       {asset:'farm-border-detail',modulus:17,remainder:8}
     ],
     landmarks:[{x:1,y:5,asset:'farm-landmark'},{x:32,y:17,asset:'farm-landmark'}],
@@ -64,7 +64,7 @@ export const FARM_WORLD: WorldDefinition = {
       {x:7,y:9,asset:'farm-flowers',size:66},{x:10,y:21,asset:'farm-shrub',size:70},
       {x:17,y:12,asset:'farm-flowers',size:66},{x:23,y:8,asset:'farm-shrub',size:70},
       {x:26,y:21,asset:'farm-flowers',size:66},{x:31,y:13,asset:'farm-shrub',size:70},
-      {x:4,y:20,asset:'farm-fence',size:72},{x:28,y:7,asset:'farm-fence',size:72}
+      {x:4,y:20,asset:'farm-sign',size:72},{x:28,y:7,asset:'farm-sign',size:72}
     ]
   }
 };

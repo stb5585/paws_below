@@ -60,6 +60,12 @@ function validateRenderAssets(
     if (asset.groundAnchor.x < 0 || asset.groundAnchor.x > 1 || asset.groundAnchor.y < 0 || asset.groundAnchor.y > 1) {
       issues.push(`render asset ${asset.id}: groundAnchor must be normalized`);
     }
+    [asset.placementOffset, asset.depthOffset].filter(offset => offset !== undefined).forEach(offset => {
+      if (!Number.isFinite(offset!.x) || !Number.isFinite(offset!.y)) issues.push(`render asset ${asset.id}: offsets must be finite`);
+    });
+    if (asset.standingLift !== undefined && (!Number.isFinite(asset.standingLift) || asset.standingLift < 0)) {
+      issues.push(`render asset ${asset.id}: standingLift must be non-negative`);
+    }
     const grid = grids.find(candidate => candidate.key === asset.texture);
     if (!grid) { issues.push(`render asset ${asset.id}: unknown texture ${asset.texture}`); return; }
     const match = asset.frame.match(new RegExp(`^${grid.prefix}-(\\d+)$`));

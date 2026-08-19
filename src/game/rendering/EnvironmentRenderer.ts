@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
-import { diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
+import { diamondHalfToward, diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
-  ENVIRONMENT_ASSETS, placeProjectedSprite,
+  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan, wallInsetTowardGround,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
 } from './catalog';
 
@@ -13,6 +13,9 @@ export interface EnvironmentView {
   discovered: boolean;
   occludesActor: boolean;
   occlusionGroup?: string;
+  coveredPoints?: GridPoint[];
+  naturalAlpha: number;
+  surfaceColor?: number;
 }
 
 export interface EnvironmentOcclusionGroup {
@@ -34,6 +37,13 @@ export function assetForWall(world: WorldDefinition, point: GridPoint, isBlock: 
     ?? world.rendering.wallAsset;
 }
 
+export function crossingAssetForPoint(world: WorldDefinition, point: GridPoint): ProjectedSpriteAsset | undefined {
+  const pathIndex = world.jumpPaths.findIndex(path => path.some(candidate => pointKey(candidate) === pointKey(point)));
+  if (pathIndex < 0) return undefined;
+  const choices = world.rendering.crossingAssets;
+  return ENVIRONMENT_ASSETS[choices[pathIndex % choices.length]];
+}
+
 export class EnvironmentRenderer {
   private readonly views: EnvironmentView[] = [];
   private readonly groups: EnvironmentOcclusionGroup[] = [];
@@ -42,11 +52,21 @@ export class EnvironmentRenderer {
 
   render(): EnvironmentView[] {
     const crossingKeys = new Set(this.world.jumpPaths.flat().map(pointKey));
+    const blockKeys = new Set<string>();
+    this.world.blocks.forEach(block => {
+      for (let y = block.y; y < block.y + block.height; y++) {
+        for (let x = block.x; x < block.x + block.width; x++) blockKeys.add(pointKey({ x, y }));
+      }
+    });
     const lavaTiles: Phaser.GameObjects.Graphics[] = [];
     for (let y = 0; y < this.world.height; y++) {
       for (let x = 0; x < this.world.width; x++) {
-        if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
         const point = { x, y };
+        if (blockKeys.has(pointKey(point))) {
+          this.drawFloor(point);
+          continue;
+        }
+        if (!this.world.isFloorCell(x, y) && !this.world.isObstacleCell(x, y)) continue;
         if (this.world.isObstacleCell(x, y)) {
           if (this.world.theme === 'burrow') lavaTiles.push(this.drawLava(point));
           else this.drawFloor(point);
@@ -92,9 +112,14 @@ export class EnvironmentRenderer {
     point: GridPoint,
     objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>,
     occludesActor = false,
-    occlusionGroup?: string
+    occlusionGroup?: string,
+    coveredPoints?: GridPoint[],
+    surfaceColor?: number
   ): void {
-    objects.forEach(object => this.views.push({ point, object, discovered: false, occludesActor, occlusionGroup }));
+    objects.forEach(object => this.views.push({
+      point, object, discovered: false, occludesActor, occlusionGroup, coveredPoints,
+      naturalAlpha: object.alpha, surfaceColor
+    }));
   }
 
   private drawFloor(point: GridPoint): void {
@@ -107,7 +132,8 @@ export class EnvironmentRenderer {
       const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
         depth: GroundDepth.detail, alpha: .72
       });
-      this.track(point, [base, texture]);
+      this.track(point, [base], false, undefined, undefined, color);
+      this.track(point, [texture]);
       return;
     }
     const color = (point.x + point.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
@@ -116,7 +142,8 @@ export class EnvironmentRenderer {
     const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
       depth: GroundDepth.detail
     });
-    this.track(point, [base, texture]);
+    this.track(point, [base], false, undefined, undefined, color);
+    this.track(point, [texture]);
   }
 
   private drawLava(point: GridPoint): Phaser.GameObjects.Graphics {
@@ -148,9 +175,8 @@ export class EnvironmentRenderer {
   }
 
   private drawCrossing(point: GridPoint): void {
-    const pathIndex = this.world.jumpPaths.findIndex(path => path.some(candidate => pointKey(candidate) === pointKey(point)));
-    const choices = this.world.rendering.crossingAssets;
-    const definition = ENVIRONMENT_ASSETS[choices[Math.max(0, pathIndex) % choices.length]];
+    const definition = crossingAssetForPoint(this.world, point);
+    if (!definition) return;
     const image = placeProjectedSprite(this.scene, point, definition, { depth: GroundDepth.detail });
     this.track(point, [image]);
   }
@@ -192,18 +218,126 @@ export class EnvironmentRenderer {
         });
       }
     }
-    walls.forEach(key => {
+    const reserved = new Set<string>();
+    const fencePlacements: Array<{ from: GridPoint; to: GridPoint; group?: string }> = [];
+    const sameGroup = (point: GridPoint, group: string | undefined): boolean => {
+      const key = pointKey(point);
+      return walls.has(key) && wallGroups.get(key) === group;
+    };
+    const runLength = (point: GridPoint, dx: number, dy: number, group: string | undefined): number => {
+      let length = 1;
+      for (const direction of [-1, 1]) {
+        let distance = 1;
+        while (sameGroup({ x: point.x + dx * distance * direction, y: point.y + dy * distance * direction }, group)) {
+          length++; distance++;
+        }
+      }
+      return length;
+    };
+    const sortedWallKeys = [...walls].sort((a, b) => {
+      const [ax, ay] = a.split(',').map(Number);
+      const [bx, by] = b.split(',').map(Number);
+      return ax + ay - bx - by || ay - by || ax - bx;
+    });
+    sortedWallKeys.forEach(key => {
+      if (reserved.has(key)) return;
       const [x, y] = key.split(',').map(Number);
       const point = { x, y };
-      const definition = ENVIRONMENT_ASSETS[assetForWall(this.world, point, blocks.has(key))];
-      const image = placeProjectedSprite(this.scene, point, definition);
-      this.track(point, [image], true, wallGroups.get(key));
+      if (assetForWall(this.world, point, blocks.has(key)) !== 'farm-boundary-fence') return;
+      const group = wallGroups.get(key);
+      const axes = [
+        { dx: 1, dy: 0, length: runLength(point, 1, 0, group) },
+        { dx: 0, dy: 1, length: runLength(point, 0, 1, group) }
+      ].sort((a, b) => b.length - a.length);
+      let partner: GridPoint | undefined;
+      for (const axis of axes) {
+        partner = [1, -1]
+          .map(direction => ({ x: x + axis.dx * direction, y: y + axis.dy * direction }))
+          .find(candidate => sameGroup(candidate, group) && !reserved.has(pointKey(candidate)));
+        if (partner) break;
+      }
+      if (!partner) return;
+      reserved.add(key); reserved.add(pointKey(partner));
+      fencePlacements.push({ from: point, to: partner, group });
+    });
+    fencePlacements.forEach(({ from, to, group }) => {
+      const placement = placementForWallSpan(from, to);
+      this.drawBoundaryFoundation(from);
+      this.drawBoundaryFoundation(to);
+      const fromInset = this.boundaryWallInset(from);
+      const toInset = this.boundaryWallInset(to);
+      const inset = { x: (fromInset.x + toInset.x) / 2, y: (fromInset.y + toInset.y) / 2 };
+      const placementOffset = {
+        x: placement.placementOffset.x + inset.x, y: placement.placementOffset.y + inset.y
+      };
+      const depthOffset = { x: placement.depthOffset.x + inset.x, y: placement.depthOffset.y + inset.y };
+      const image = placeProjectedSprite(this.scene, from, ENVIRONMENT_ASSETS['farm-boundary-fence'], {
+        ...placement, placementOffset, depthOffset
+      });
+      const midpoint = { x: from.x + placementOffset.x, y: from.y + placementOffset.y };
+      this.track(midpoint, [image], true, group, [from, to]);
+    });
+    sortedWallKeys.forEach(key => {
+      if (reserved.has(key)) return;
+      const [x, y] = key.split(',').map(Number);
+      const point = { x, y };
+      const assetId = assetForWall(this.world, point, blocks.has(key));
+      const definition = ENVIRONMENT_ASSETS[assetId === 'farm-boundary-fence' ? this.world.rendering.wallAsset : assetId];
+      const inset = this.boundaryWallInset(point);
+      const image = placeProjectedSprite(this.scene, point, definition, {
+        placementOffset: inset, depthOffset: inset
+      });
+      this.track({ x: point.x + inset.x, y: point.y + inset.y }, [image], true, wallGroups.get(key), [point]);
     });
     new Set(wallGroups.values()).forEach(groupId => {
       const members = this.views.filter(view => view.occlusionGroup === groupId);
       if (!members.length) return;
       this.groups.push({ id: groupId, members });
     });
+  }
+
+  private groundDirections(point: GridPoint): GridPoint[] {
+    return [
+      { x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }
+    ].filter(direction => {
+      const x = point.x + direction.x;
+      const y = point.y + direction.y;
+      return this.world.isFloorCell(x, y) || this.world.isObstacleCell(x, y);
+    });
+  }
+
+  private boundaryWallInset(point: GridPoint, distance = .5): GridPoint {
+    return wallInsetTowardGround(this.groundDirections(point), distance);
+  }
+
+  private drawBoundaryFoundation(point: GridPoint): void {
+    const position = projectGridPoint(point);
+    const maskShape = this.scene.make.graphics({}, false).fillStyle(0xffffff, 1);
+    const bases: Array<{ object: Phaser.GameObjects.Polygon; color: number }> = [];
+    this.groundDirections(point).forEach(direction => {
+      const adjacent = { x: point.x + direction.x, y: point.y + direction.y };
+      const color = this.world.theme === 'farm'
+        ? FARM_GRASS[Math.abs(adjacent.x * 7 + adjacent.y * 11) % FARM_GRASS.length]
+        : (adjacent.x + adjacent.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
+      const triangle = diamondHalfToward(direction);
+      const base = this.scene.add.polygon(position.x, position.y, triangle, color, 1)
+        .setDepth(GroundDepth.base);
+      bases.push({ object: base, color });
+      maskShape.fillPoints([
+        new Phaser.Geom.Point(position.x + triangle[0], position.y + triangle[1]),
+        new Phaser.Geom.Point(position.x + triangle[2], position.y + triangle[3]),
+        new Phaser.Geom.Point(position.x + triangle[4], position.y + triangle[5])
+      ], true);
+    });
+    if (!bases.length) {
+      maskShape.destroy();
+      return;
+    }
+    bases.forEach(base => this.track(point, [base.object], false, undefined, undefined, base.color));
+    const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
+      depth: GroundDepth.detail, alpha: this.world.theme === 'farm' ? .72 : 1
+    }).setMask(maskShape.createGeometryMask());
+    this.track(point, [texture]);
   }
 
   private drawDecor(item: WorldPropPlacement): void {

@@ -58,6 +58,10 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 - Added shared ground-contact depth helpers and named ground, world, and UI layers; floor surfaces remain below every actor while walls and props sort by ground contact.
 - Actors now change depth from their ground position rather than using a fixed depth.
 - Walls remain solid and unchanged; when a connected section occludes the animal, a synchronized translucent animal overlay preserves readability without wall transparency seams.
+- Farm fences now derive their orientation, midpoint, and depth anchor from the two boundary cells they replace. Both diagonal wall directions use the same asset with placement-specific flipping, and the complete two-cell span is reserved so corn cannot overlap the fence or shift the apparent row alignment.
+- Boundary walls and fences share the same half-cell ground-contact line on both isometric axes. The fence uses an asset-specific ground anchor matching the corn base and receives clipped, textured foundations on only the wall-facing half of its two covered cells, avoiding gaps without moving the span off its row. Exposed internal wall faces use the same neighbor-aware visual inset while their collision cells remain unchanged over complete themed ground foundations. Cozy-light visibility shades opaque floor surfaces and tints environment sprites instead of fading every tile independently, preventing the scene background from reopening divergent seams.
+- Player collision now checks a nine-point ground footprint rather than only the rounded center position. Perimeter and internal walls therefore stop the complete animal footprint, including along the lower map edges and diagonal corners.
+- Crossings now define a standing height: the animal and shadow rest on top of rocks and hay bales, and directional input can turn the animal before the next jump.
 - Walls, stepping stones, collectibles, effects, decor, and exit elements use the same ordering model.
 - Removed duplicate rendering of blocked underground cells.
 - Included underground decor in the lighting visibility set.

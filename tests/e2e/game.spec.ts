@@ -304,6 +304,24 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(inFront.wallAlpha).toBe(1);
   expect(inFront.overlayVisible).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
+  const undergroundCozyLighting = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = false;
+    scene.player.x = 6; scene.player.y = 4; scene.positionDog(0, false); scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const surfaces = scene.tileViews.filter((view: any) => view.surfaceColor !== undefined);
+    const distantWall = scene.tileViews.find((view: any) => view.object.texture?.key === 'burrow-atlas'
+      && view.object.frame?.name === 'env-1' && Math.hypot(view.point.x - 6, view.point.y - 4) > 10);
+    return {
+      surfacesOpaque: surfaces.every((view: any) => view.object.alpha === 1),
+      distantWallAlpha: distantWall.object.alpha,
+      distantWallTint: distantWall.object.tintTopLeft
+    };
+  });
+  expect(undergroundCozyLighting.surfacesOpaque).toBe(true);
+  expect(undergroundCozyLighting.distantWallAlpha).toBe(1);
+  expect(undergroundCozyLighting.distantWallTint).not.toBe(0xffffff);
+  await page.screenshot({ path: testInfo.outputPath('underground-cozy-boundary.png') });
 });
 
 test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
@@ -483,26 +501,158 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       .filter((point: any) => scene.world.isObstacleCell(point.x, point.y))
       .map((point: any) => `${point.x},${point.y}`));
     const crossings = images.filter((view: any) => crossingKeys.has(`${view.point.x},${view.point.y}`)
-      && ['farm-4', 'farm-5'].includes(view.object.frame.name));
+      && view.object.frame.name === 'farm-4');
+    const fences = images.filter((view: any) => view.object.frame.name === 'farm-5');
+    const wallViews = scene.tileViews.filter((view: any) => view.occludesActor);
     const blockCounts = scene.world.blocks.flatMap((block: any) => {
-      const counts: number[] = [];
+      const counts: Array<{ walls: number; ground: number }> = [];
       for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
-        counts.push(images.filter((view: any) => view.point.x === x && view.point.y === y && view.object.frame.name === 'farm-1').length);
+        counts.push({
+          walls: images.filter((view: any) => view.coveredPoints?.some((point: any) => point.x === x && point.y === y)
+            && view.object.frame.name === 'farm-1').length,
+          ground: images.filter((view: any) => view.point.x === x && view.point.y === y
+            && view.object.frame.name === 'farm-0').length
+        });
       }
       return counts;
+    });
+    const backFence = fences.find((view: any) => view.coveredPoints.every((point: any) => point.y === 1));
+    const sideFence = fences.find((view: any) => view.coveredPoints.every((point: any) => point.x === 1));
+    const blockWalls = images.filter((view: any) => view.object.frame.name === 'farm-1'
+      && view.coveredPoints?.length === 1 && scene.world.blocks.some((block: any) =>
+        view.coveredPoints[0].x >= block.x && view.coveredPoints[0].x < block.x + block.width
+        && view.coveredPoints[0].y >= block.y && view.coveredPoints[0].y < block.y + block.height));
+    const exposedBlockWallsAligned = blockWalls.every((view: any) => {
+      const point = view.coveredPoints[0];
+      const directions = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(direction =>
+        scene.world.isFloorCell(point.x + direction.x, point.y + direction.y)
+        || scene.world.isObstacleCell(point.x + direction.x, point.y + direction.y));
+      if (!directions.length) return view.point.x === point.x && view.point.y === point.y;
+      const expectedX = point.x + directions.reduce((sum: number, direction: any) => sum + direction.x, 0) / directions.length / 2;
+      const expectedY = point.y + directions.reduce((sum: number, direction: any) => sum + direction.y, 0) / directions.length / 2;
+      return view.point.x === expectedX && view.point.y === expectedY;
     });
     return {
       crossings: crossings.length,
       expectedCrossings: crossingKeys.size,
-      everyBlockOnce: blockCounts.every((count: number) => count === 1),
+      everyBlockOnce: blockCounts.every((count: any) => count.walls === 1 && count.ground === 1),
       grassAnchorY: images.find((view: any) => view.object.frame.name === 'farm-0')?.object.originY,
-      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length
+      barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length,
+      backFenceInset: backFence?.point.y - 1,
+      sideFenceInset: sideFence?.point.x - 1,
+      everyFenceGrounded: fences.every((view: any) => view.coveredPoints.every((point: any) =>
+        images.some((candidate: any) => candidate.point.x === point.x && candidate.point.y === point.y
+          && candidate.object.frame.name === 'farm-0'))),
+      exposedBlockWallsAligned,
+      bottomWallCollision: {
+        inside: scene.canOccupy(14, 21.19), outside: scene.canOccupy(14, 21.21)
+      },
+      fences: fences.map((view: any) => ({
+        width: view.object.displayWidth,
+        flipX: view.object.flipX,
+        coveredPoints: view.coveredPoints,
+        overlaps: view.coveredPoints?.some((point: any) => wallViews.some((other: any) => other !== view
+          && other.coveredPoints?.some((covered: any) => covered.x === point.x && covered.y === point.y)))
+      }))
     };
   });
   expect(farmFixture).toEqual(expect.objectContaining({
-    crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1
+    crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1,
+    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true, exposedBlockWallsAligned: true,
+    bottomWallCollision: { inside: true, outside: false }
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
+  expect(farmFixture.fences.length).toBeGreaterThan(0);
+  expect(farmFixture.fences.every((fence: any) => fence.width === 160
+    && fence.coveredPoints.length === 2 && !fence.overlaps)).toBe(true);
+  expect([...new Set(farmFixture.fences.map((fence: any) => fence.flipX))].sort()).toEqual([false, true]);
+  await page.evaluate((flipX) => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-5' && view.object.flipX === flipX);
+    scene.cameras.main.centerOn(fence.object.x, fence.object.y);
+  }, false);
+  await page.screenshot({path:testInfo.outputPath('farm-fence-northwest-southeast.png')});
+  await page.evaluate((flipX) => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-5' && view.object.flipX === flipX);
+    scene.cameras.main.centerOn(fence.object.x, fence.object.y);
+  }, true);
+  await page.screenshot({path:testInfo.outputPath('farm-fence-southwest-northeast.png')});
+  const cozyLighting = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = false;
+    scene.player.x = 4; scene.player.y = 4; scene.positionDog(0, false); scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const surfaces = scene.tileViews.filter((view: any) => view.surfaceColor !== undefined);
+    const distantWall = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-1' && Math.hypot(view.point.x - 4, view.point.y - 4) > 10);
+    return {
+      surfacesOpaque: surfaces.every((view: any) => view.object.alpha === 1),
+      distantWallAlpha: distantWall.object.alpha,
+      distantWallTint: distantWall.object.tintTopLeft
+    };
+  });
+  expect(cozyLighting.surfacesOpaque).toBe(true);
+  expect(cozyLighting.distantWallAlpha).toBe(1);
+  expect(cozyLighting.distantWallTint).not.toBe(0xffffff);
+  await page.screenshot({path:testInfo.outputPath('farm-cozy-boundary.png')});
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = true;
+    scene.player.x = 7; scene.player.y = 7; scene.positionDog(0, false); scene.updateVisibility();
+  });
+  const crossingPose = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 11; scene.player.y = 8; scene.player.jumpLift = 0; scene.player.surfaceLift = 0;
+    scene.positionDog(0, false);
+    const before = { x: scene.player.x, y: scene.player.y };
+    scene.movePlayer(-1, 0, 0, 16);
+    scene.positionDog(0, false);
+    return {
+      before, after: { x: scene.player.x, y: scene.player.y }, surfaceLift: scene.player.surfaceLift,
+      spriteY: scene.dogSprite.y, shadowY: scene.dogShadow.y,
+      overlayAligned: !scene.dogOcclusionSprite.visible || scene.dogOcclusionSprite.y === scene.dog.y + scene.dogSprite.y,
+      facingLeft: scene.dogSprite.flipX, frame: scene.tileViews.find((view: any) => view.point.x === 11 && view.point.y === 8
+        && view.object.texture?.key === 'farm-atlas' && view.object.frame?.name === 'farm-4')?.object.frame.name
+    };
+  });
+  expect(crossingPose).toEqual({
+    before: { x: 11, y: 8 }, after: { x: 11, y: 8 }, surfaceLift: -22,
+    spriteY: -60, shadowY: -4, overlayAligned: true, facingLeft: true, frame: 'farm-4'
+  });
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.player.x = 11; scene.player.y = 7; scene.player.jumpLift = 0; scene.player.surfaceLift = 0; scene.busy = false;
+    scene.positionDog(0, false); scene.tryJump(-1, .5);
+  });
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  const landing = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    return {
+      x: scene.player.x, y: scene.player.y, surfaceLift: scene.player.surfaceLift,
+      shadowY: scene.dogShadow.y,
+      overlayAligned: !scene.dogOcclusionSprite.visible || scene.dogOcclusionSprite.y === scene.dog.y + scene.dogSprite.y
+    };
+  });
+  expect(landing.x).toBeCloseTo(11, 3); expect(landing.y).toBeCloseTo(8, 3);
+  expect(landing).toEqual(expect.objectContaining({ surfaceLift: -22, shadowY: -4, overlayAligned: true }));
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.movePlayer(1, 0, 0, 16); scene.tryJump(0, 0);
+  });
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  const turnedLanding = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    return { x: scene.player.x, y: scene.player.y, surfaceLift: scene.player.surfaceLift, facingLeft: scene.dogSprite.flipX };
+  });
+  expect(turnedLanding.x).toBeCloseTo(11, 3); expect(turnedLanding.y).toBeCloseTo(7, 3);
+  expect(turnedLanding.surfaceLift).toBe(0); expect(turnedLanding.facingLeft).toBe(false);
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+  });
   await page.screenshot({path:testInfo.outputPath('farm-map.png')});
 });
 

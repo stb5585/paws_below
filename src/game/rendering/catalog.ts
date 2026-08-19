@@ -5,8 +5,8 @@ import { WorldLayer, projectGridPoint, worldDepth, type WorldLayerOffset } from 
 export type EnvironmentAssetId =
   | 'burrow-floor' | 'burrow-wall' | 'burrow-stone'
   | 'burrow-mushroom' | 'burrow-crystal' | 'burrow-root' | 'burrow-lantern' | 'burrow-web'
-  | 'farm-grass' | 'farm-corn' | 'farm-barn' | 'farm-landmark' | 'farm-stone-a' | 'farm-stone-b' | 'farm-hay'
-  | 'farm-fence' | 'farm-border-detail' | 'farm-flowers' | 'farm-shrub';
+  | 'farm-grass' | 'farm-corn' | 'farm-barn' | 'farm-landmark' | 'farm-stone-a' | 'farm-stone-b'
+  | 'farm-boundary-fence' | 'farm-sign' | 'farm-border-detail' | 'farm-flowers' | 'farm-shrub';
 
 export interface GridFootprint {
   width: number;
@@ -25,7 +25,14 @@ export interface ProjectedSpriteAsset {
   displaySize: number;
   groundAnchor: Readonly<GridPoint>;
   footprint: Readonly<GridFootprint>;
+  placementOffset?: Readonly<GridPoint>;
+  depthOffset?: Readonly<GridPoint>;
+  flipX?: boolean;
+  standingLift?: number;
 }
+
+type ProjectedSpriteOptions = Pick<ProjectedSpriteAsset,
+  'placementOffset' | 'depthOffset' | 'flipX' | 'standingLift'>;
 
 const asset = (
   id: EnvironmentAssetId,
@@ -33,15 +40,16 @@ const asset = (
   frame: string,
   displaySize: number,
   groundAnchorY: number,
-  footprint: GridFootprint = { width: 1, height: 1 }
+  footprint: GridFootprint = { width: 1, height: 1 },
+  options: ProjectedSpriteOptions = {}
 ): ProjectedSpriteAsset => ({
-  id, texture, frame, displaySize, groundAnchor: { x: .5, y: groundAnchorY }, footprint
+  id, texture, frame, displaySize, groundAnchor: { x: .5, y: groundAnchorY }, footprint, ...options
 });
 
 export const ENVIRONMENT_ASSETS: Readonly<Record<EnvironmentAssetId, ProjectedSpriteAsset>> = {
   'burrow-floor': asset('burrow-floor', 'burrow-atlas', 'env-0', 112, .536),
   'burrow-wall': asset('burrow-wall', 'burrow-atlas', 'env-1', 118, .763),
-  'burrow-stone': asset('burrow-stone', 'burrow-atlas', 'env-3', 80, .613),
+  'burrow-stone': asset('burrow-stone', 'burrow-atlas', 'env-3', 80, .613, { width: 1, height: 1 }, { standingLift: 12 }),
   'burrow-mushroom': asset('burrow-mushroom', 'burrow-atlas', 'env-5', 76, .92),
   'burrow-crystal': asset('burrow-crystal', 'burrow-atlas', 'env-6', 80, .92),
   'burrow-root': asset('burrow-root', 'burrow-atlas', 'env-7', 76, .92),
@@ -51,10 +59,10 @@ export const ENVIRONMENT_ASSETS: Readonly<Record<EnvironmentAssetId, ProjectedSp
   'farm-corn': asset('farm-corn', 'farm-atlas', 'farm-1', 118, .763),
   'farm-barn': asset('farm-barn', 'farm-atlas', 'farm-2', 220, .8, { width: 2, height: 2 }),
   'farm-landmark': asset('farm-landmark', 'farm-atlas', 'farm-3', 138, .812, { width: 2, height: 2 }),
-  'farm-stone-a': asset('farm-stone-a', 'farm-atlas', 'farm-4', 76, .697),
-  'farm-stone-b': asset('farm-stone-b', 'farm-atlas', 'farm-5', 76, .697),
-  'farm-hay': asset('farm-hay', 'farm-atlas', 'farm-5', 108, .685),
-  'farm-fence': asset('farm-fence', 'farm-atlas', 'farm-7', 72, .92),
+  'farm-stone-a': asset('farm-stone-a', 'farm-atlas', 'farm-4', 76, .697, { width: 1, height: 1 }, { standingLift: 22 }),
+  'farm-stone-b': asset('farm-stone-b', 'farm-atlas', 'farm-4', 76, .697, { width: 1, height: 1 }, { standingLift: 22, flipX: true }),
+  'farm-boundary-fence': asset('farm-boundary-fence', 'farm-atlas', 'farm-5', 160, .83, { width: 2, height: 1 }),
+  'farm-sign': asset('farm-sign', 'farm-atlas', 'farm-7', 72, .92),
   'farm-border-detail': asset('farm-border-detail', 'farm-atlas', 'farm-13', 118, .763),
   'farm-flowers': asset('farm-flowers', 'farm-atlas', 'farm-14', 66, .92),
   'farm-shrub': asset('farm-shrub', 'farm-atlas', 'farm-15', 70, .92)
@@ -65,6 +73,47 @@ export interface SpritePlacementOptions {
   layer?: WorldLayerOffset;
   depth?: number;
   alpha?: number;
+  placementOffset?: Readonly<GridPoint>;
+  depthOffset?: Readonly<GridPoint>;
+  flipX?: boolean;
+}
+
+export interface WallSpanPlacement {
+  placementOffset: Readonly<GridPoint>;
+  depthOffset: Readonly<GridPoint>;
+  flipX: boolean;
+  footprint: GridFootprint;
+}
+
+/** Positions the same two-cell fence asset along either isometric grid axis. */
+export function placementForWallSpan(from: GridPoint, to: GridPoint): WallSpanPlacement {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) + Math.abs(dy) !== 1) {
+    throw new Error('A wall span must cover two adjacent grid cells');
+  }
+  const placementOffset = { x: dx / 2, y: dy / 2 };
+  const depthOffset = dx + dy > 0 ? { x: dx, y: dy } : { x: 0, y: 0 };
+  return {
+    placementOffset,
+    depthOffset,
+    flipX: dy !== 0,
+    footprint: dx === 0 ? { width: 1, height: 2 } : { width: 2, height: 1 }
+  };
+}
+
+/** Moves a wall toward the playable cells it borders. */
+export function wallInsetTowardGround(directions: readonly GridPoint[], distance = .5): GridPoint {
+  if (!directions.length) return { x: 0, y: 0 };
+  directions.forEach(direction => {
+    if (Math.abs(direction.x) + Math.abs(direction.y) !== 1) {
+      throw new Error('A wall inset direction must identify one adjacent grid cell');
+    }
+  });
+  return {
+    x: directions.reduce((sum, direction) => sum + direction.x, 0) / directions.length * distance,
+    y: directions.reduce((sum, direction) => sum + direction.y, 0) / directions.length * distance
+  };
 }
 
 export interface WorldPropPlacement extends GridPoint {
@@ -95,12 +144,16 @@ export function placeProjectedSprite(
   definition: ProjectedSpriteAsset,
   options: SpritePlacementOptions = {}
 ): Phaser.GameObjects.Image {
-  const position = projectGridPoint(point);
+  const placementOffset = options.placementOffset ?? definition.placementOffset ?? { x: 0, y: 0 };
+  const depthOffset = options.depthOffset ?? definition.depthOffset ?? placementOffset;
+  const position = projectGridPoint({ x: point.x + placementOffset.x, y: point.y + placementOffset.y });
+  const depthPosition = projectGridPoint({ x: point.x + depthOffset.x, y: point.y + depthOffset.y });
   const size = options.size ?? definition.displaySize;
   const image = scene.add.image(position.x, position.y, definition.texture, definition.frame)
     .setOrigin(definition.groundAnchor.x, definition.groundAnchor.y)
     .setDisplaySize(size, size)
-    .setDepth(options.depth ?? worldDepth(position.y, options.layer ?? WorldLayer.prop));
+    .setDepth(options.depth ?? worldDepth(depthPosition.y, options.layer ?? WorldLayer.prop))
+    .setFlipX(options.flipX ?? definition.flipX ?? false);
   if (options.alpha !== undefined) image.setAlpha(options.alpha);
   return image;
 }
