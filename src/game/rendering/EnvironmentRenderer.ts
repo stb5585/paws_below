@@ -14,6 +14,8 @@ export interface EnvironmentView {
   occludesActor: boolean;
   occlusionGroup?: string;
   coveredPoints?: GridPoint[];
+  naturalAlpha: number;
+  surfaceColor?: number;
 }
 
 export interface EnvironmentOcclusionGroup {
@@ -101,10 +103,12 @@ export class EnvironmentRenderer {
     objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>,
     occludesActor = false,
     occlusionGroup?: string,
-    coveredPoints?: GridPoint[]
+    coveredPoints?: GridPoint[],
+    surfaceColor?: number
   ): void {
     objects.forEach(object => this.views.push({
-      point, object, discovered: false, occludesActor, occlusionGroup, coveredPoints
+      point, object, discovered: false, occludesActor, occlusionGroup, coveredPoints,
+      naturalAlpha: object.alpha, surfaceColor
     }));
   }
 
@@ -118,7 +122,8 @@ export class EnvironmentRenderer {
       const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
         depth: GroundDepth.detail, alpha: .72
       });
-      this.track(point, [base, texture]);
+      this.track(point, [base], false, undefined, undefined, color);
+      this.track(point, [texture]);
       return;
     }
     const color = (point.x + point.y) % 2 ? BURROW_FLOOR.a : BURROW_FLOOR.b;
@@ -127,7 +132,8 @@ export class EnvironmentRenderer {
     const texture = placeProjectedSprite(this.scene, point, ENVIRONMENT_ASSETS[this.world.rendering.floorAsset], {
       depth: GroundDepth.detail
     });
-    this.track(point, [base, texture]);
+    this.track(point, [base], false, undefined, undefined, color);
+    this.track(point, [texture]);
   }
 
   private drawLava(point: GridPoint): Phaser.GameObjects.Graphics {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
-  actorOverlayDepth, diamondPoints, projectGridPoint, worldDepth
+  actorOverlayDepth, blendRgb, diamondPoints, projectGridPoint, visibilityTint, worldDepth
 } from '../src/game/systems/rendering';
 import { ENVIRONMENT_ASSETS, placementForWallSpan, wallInsetTowardGround } from '../src/game/rendering/catalog';
 
@@ -39,6 +39,14 @@ describe('isometric rendering order', () => {
     expect(projectGridPoint({ x: 1, y: 0 })).toEqual({ x: 1698, y: 104 });
     expect(projectGridPoint({ x: 0, y: 1 })).toEqual({ x: 1602, y: 104 });
     expect(diamondPoints()).toEqual([0, -24, 48, 0, 0, 24, -48, 0]);
+  });
+
+  it('darkens opaque terrain without exposing seams through alpha', () => {
+    expect(blendRgb(0x000000, 0xffffff, .5)).toBe(0x808080);
+    expect(blendRgb(0x314b2b, 0x79a950, 0)).toBe(0x314b2b);
+    expect(blendRgb(0x314b2b, 0x79a950, 1)).toBe(0x79a950);
+    expect(visibilityTint(0)).toBe(0x141414);
+    expect(visibilityTint(1)).toBe(0xffffff);
   });
 
   it('defines normalized ground anchors and footprints for every environment asset', () => {

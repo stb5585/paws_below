@@ -13,7 +13,10 @@ import { shouldShowTouchControls } from '../systems/device';
 import { canCollectAlongPath } from '../systems/collectibles';
 import { getGameLayout, type GameLayout } from '../systems/layout';
 import { nearestUndugTreasure, TREASURE_REVEAL_MS } from '../systems/guidance';
-import { ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, UiDepth, WorldLayer, projectGridPoint, worldDepth } from '../systems/rendering';
+import {
+  ACTOR_OCCLUDER_DISTANCE, ACTOR_OCCLUSION_ALPHA, actorOverlayDepth, blendRgb,
+  UiDepth, visibilityTint, WorldLayer, projectGridPoint, worldDepth
+} from '../systems/rendering';
 import { EnvironmentRenderer, crossingAssetForPoint, type EnvironmentOcclusionGroup, type EnvironmentView } from '../rendering/EnvironmentRenderer';
 
 interface PlayerModel extends GridPoint { jumpLift: number; surfaceLift: number }
@@ -575,9 +578,19 @@ export class MazeScene extends Phaser.Scene {
     this.tileViews.forEach(tile=>{
       const distance=Phaser.Math.Distance.Between(this.player.x,this.player.y,tile.point.x,tile.point.y);
       if(distance<radius*.65)tile.discovered=true;
-      const baseAlpha = this.profile.fullBrightness ? 1 : distance < radius
+      const visibility = this.profile.fullBrightness ? 1 : distance < radius
         ? Phaser.Math.Linear(.95, .28, distance / radius) : tile.discovered ? .24 : .035;
-      tile.object.setAlpha(baseAlpha);
+      if (tile.surfaceColor !== undefined) {
+        const background = this.world.theme === 'farm' ? 0x314b2b : 0x170e0b;
+        tile.object.setAlpha(1);
+        (tile.object as Phaser.GameObjects.Polygon).setFillStyle(blendRgb(background, tile.surfaceColor, visibility), 1);
+      } else if (tile.object instanceof Phaser.GameObjects.Image) {
+        tile.object.setAlpha(tile.naturalAlpha);
+        if (visibility === 1) tile.object.clearTint();
+        else tile.object.setTint(visibilityTint(visibility));
+      } else {
+        tile.object.setAlpha(tile.naturalAlpha * visibility);
+      }
     });
     const sniff=this.run.isPowerActive('sniff',now);
     this.collectibleViews.forEach(view=>{

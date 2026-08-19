@@ -304,6 +304,24 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(inFront.wallAlpha).toBe(1);
   expect(inFront.overlayVisible).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('depth-in-front-wall.png') });
+  const undergroundCozyLighting = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = false;
+    scene.player.x = 6; scene.player.y = 4; scene.positionDog(0, false); scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const surfaces = scene.tileViews.filter((view: any) => view.surfaceColor !== undefined);
+    const distantWall = scene.tileViews.find((view: any) => view.object.texture?.key === 'burrow-atlas'
+      && view.object.frame?.name === 'env-1' && Math.hypot(view.point.x - 6, view.point.y - 4) > 10);
+    return {
+      surfacesOpaque: surfaces.every((view: any) => view.object.alpha === 1),
+      distantWallAlpha: distantWall.object.alpha,
+      distantWallTint: distantWall.object.tintTopLeft
+    };
+  });
+  expect(undergroundCozyLighting.surfacesOpaque).toBe(true);
+  expect(undergroundCozyLighting.distantWallAlpha).toBe(1);
+  expect(undergroundCozyLighting.distantWallTint).not.toBe(0xffffff);
+  await page.screenshot({ path: testInfo.outputPath('underground-cozy-boundary.png') });
 });
 
 test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
@@ -530,6 +548,29 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     scene.cameras.main.centerOn(fence.object.x, fence.object.y);
   }, true);
   await page.screenshot({path:testInfo.outputPath('farm-fence-southwest-northeast.png')});
+  const cozyLighting = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = false;
+    scene.player.x = 4; scene.player.y = 4; scene.positionDog(0, false); scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+    const surfaces = scene.tileViews.filter((view: any) => view.surfaceColor !== undefined);
+    const distantWall = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-1' && Math.hypot(view.point.x - 4, view.point.y - 4) > 10);
+    return {
+      surfacesOpaque: surfaces.every((view: any) => view.object.alpha === 1),
+      distantWallAlpha: distantWall.object.alpha,
+      distantWallTint: distantWall.object.tintTopLeft
+    };
+  });
+  expect(cozyLighting.surfacesOpaque).toBe(true);
+  expect(cozyLighting.distantWallAlpha).toBe(1);
+  expect(cozyLighting.distantWallTint).not.toBe(0xffffff);
+  await page.screenshot({path:testInfo.outputPath('farm-cozy-boundary.png')});
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = true;
+    scene.player.x = 7; scene.player.y = 7; scene.positionDog(0, false); scene.updateVisibility();
+  });
   const crossingPose = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     scene.player.x = 11; scene.player.y = 8; scene.player.jumpLift = 0; scene.player.surfaceLift = 0;

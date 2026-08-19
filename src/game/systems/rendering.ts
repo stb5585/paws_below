@@ -37,6 +37,17 @@ export function diamondPoints(projection: IsometricProjection = GAME_PROJECTION)
   ];
 }
 
+export function blendRgb(from: number, to: number, amount: number): number {
+  const t = Math.max(0, Math.min(1, amount));
+  const channel = (shift: number) => Math.round(((from >> shift) & 0xff) * (1 - t) + ((to >> shift) & 0xff) * t);
+  return (channel(16) << 16) | (channel(8) << 8) | channel(0);
+}
+
+export function visibilityTint(amount: number): number {
+  const channel = Math.round(255 * Math.max(.08, Math.min(1, amount)));
+  return (channel << 16) | (channel << 8) | channel;
+}
+
 export const WorldLayer = {
   prop: 30,
   interactive: 40,
