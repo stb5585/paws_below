@@ -3,7 +3,7 @@ import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
 import { diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
-  ENVIRONMENT_ASSETS, placeProjectedSprite,
+  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
 } from './catalog';
 
@@ -13,6 +13,7 @@ export interface EnvironmentView {
   discovered: boolean;
   occludesActor: boolean;
   occlusionGroup?: string;
+  coveredPoints?: GridPoint[];
 }
 
 export interface EnvironmentOcclusionGroup {
@@ -99,9 +100,12 @@ export class EnvironmentRenderer {
     point: GridPoint,
     objects: Array<Phaser.GameObjects.Shape | Phaser.GameObjects.Image>,
     occludesActor = false,
-    occlusionGroup?: string
+    occlusionGroup?: string,
+    coveredPoints?: GridPoint[]
   ): void {
-    objects.forEach(object => this.views.push({ point, object, discovered: false, occludesActor, occlusionGroup }));
+    objects.forEach(object => this.views.push({
+      point, object, discovered: false, occludesActor, occlusionGroup, coveredPoints
+    }));
   }
 
   private drawFloor(point: GridPoint): void {
@@ -198,12 +202,62 @@ export class EnvironmentRenderer {
         });
       }
     }
-    walls.forEach(key => {
+    const reserved = new Set<string>();
+    const fencePlacements: Array<{ from: GridPoint; to: GridPoint; group?: string }> = [];
+    const sameGroup = (point: GridPoint, group: string | undefined): boolean => {
+      const key = pointKey(point);
+      return walls.has(key) && wallGroups.get(key) === group;
+    };
+    const runLength = (point: GridPoint, dx: number, dy: number, group: string | undefined): number => {
+      let length = 1;
+      for (const direction of [-1, 1]) {
+        let distance = 1;
+        while (sameGroup({ x: point.x + dx * distance * direction, y: point.y + dy * distance * direction }, group)) {
+          length++; distance++;
+        }
+      }
+      return length;
+    };
+    const sortedWallKeys = [...walls].sort((a, b) => {
+      const [ax, ay] = a.split(',').map(Number);
+      const [bx, by] = b.split(',').map(Number);
+      return ax + ay - bx - by || ay - by || ax - bx;
+    });
+    sortedWallKeys.forEach(key => {
+      if (reserved.has(key)) return;
       const [x, y] = key.split(',').map(Number);
       const point = { x, y };
-      const definition = ENVIRONMENT_ASSETS[assetForWall(this.world, point, blocks.has(key))];
+      if (assetForWall(this.world, point, blocks.has(key)) !== 'farm-boundary-fence') return;
+      const group = wallGroups.get(key);
+      const axes = [
+        { dx: 1, dy: 0, length: runLength(point, 1, 0, group) },
+        { dx: 0, dy: 1, length: runLength(point, 0, 1, group) }
+      ].sort((a, b) => b.length - a.length);
+      let partner: GridPoint | undefined;
+      for (const axis of axes) {
+        partner = [1, -1]
+          .map(direction => ({ x: x + axis.dx * direction, y: y + axis.dy * direction }))
+          .find(candidate => sameGroup(candidate, group) && !reserved.has(pointKey(candidate)));
+        if (partner) break;
+      }
+      if (!partner) return;
+      reserved.add(key); reserved.add(pointKey(partner));
+      fencePlacements.push({ from: point, to: partner, group });
+    });
+    fencePlacements.forEach(({ from, to, group }) => {
+      const placement = placementForWallSpan(from, to);
+      const image = placeProjectedSprite(this.scene, from, ENVIRONMENT_ASSETS['farm-boundary-fence'], placement);
+      const midpoint = { x: from.x + placement.placementOffset.x, y: from.y + placement.placementOffset.y };
+      this.track(midpoint, [image], true, group, [from, to]);
+    });
+    sortedWallKeys.forEach(key => {
+      if (reserved.has(key)) return;
+      const [x, y] = key.split(',').map(Number);
+      const point = { x, y };
+      const assetId = assetForWall(this.world, point, blocks.has(key));
+      const definition = ENVIRONMENT_ASSETS[assetId === 'farm-boundary-fence' ? this.world.rendering.wallAsset : assetId];
       const image = placeProjectedSprite(this.scene, point, definition);
-      this.track(point, [image], true, wallGroups.get(key));
+      this.track(point, [image], true, wallGroups.get(key), [point]);
     });
     new Set(wallGroups.values()).forEach(groupId => {
       const members = this.views.filter(view => view.occlusionGroup === groupId);

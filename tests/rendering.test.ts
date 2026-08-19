@@ -3,7 +3,7 @@ import {
   GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
   actorOverlayDepth, diamondPoints, projectGridPoint, worldDepth
 } from '../src/game/systems/rendering';
-import { ENVIRONMENT_ASSETS } from '../src/game/rendering/catalog';
+import { ENVIRONMENT_ASSETS, placementForWallSpan } from '../src/game/rendering/catalog';
 
 describe('isometric rendering order', () => {
   it('keeps the complete floor below y-sorted actors', () => {
@@ -52,14 +52,27 @@ describe('isometric rendering order', () => {
     });
   });
 
-  it('treats the farm fence as a flipped two-cell prop with forward depth', () => {
+  it('keeps farm fence orientation in placement metadata rather than the asset', () => {
     const fence = ENVIRONMENT_ASSETS['farm-boundary-fence'];
     expect(fence.frame).toBe('farm-5');
-    expect(fence.flipX).toBe(true);
-    expect(fence.footprint).toEqual({ width: 1, height: 2 });
-    expect(fence.placementOffset).toEqual({ x: 0, y: .5 });
-    expect(fence.depthOffset).toEqual({ x: 0, y: 1 });
+    expect(fence.flipX).toBeUndefined();
+    expect(fence.footprint).toEqual({ width: 2, height: 1 });
+    expect(fence.placementOffset).toBeUndefined();
+    expect(fence.depthOffset).toBeUndefined();
     expect(fence.displaySize).toBeGreaterThan(GAME_PROJECTION.tileWidth);
+  });
+
+  it('orients and depth-sorts a fence from the two wall cells it replaces', () => {
+    expect(placementForWallSpan({ x: 3, y: 4 }, { x: 4, y: 4 })).toEqual({
+      placementOffset: { x: .5, y: 0 }, depthOffset: { x: 1, y: 0 }, flipX: false,
+      footprint: { width: 2, height: 1 }
+    });
+    expect(placementForWallSpan({ x: 3, y: 4 }, { x: 3, y: 5 })).toEqual({
+      placementOffset: { x: 0, y: .5 }, depthOffset: { x: 0, y: 1 }, flipX: true,
+      footprint: { width: 1, height: 2 }
+    });
+    expect(placementForWallSpan({ x: 3, y: 4 }, { x: 2, y: 4 }).depthOffset).toEqual({ x: 0, y: 0 });
+    expect(() => placementForWallSpan({ x: 3, y: 4 }, { x: 5, y: 4 })).toThrow();
   });
 
   it('uses hay bales with explicit standing height for every farm crossing variant', () => {

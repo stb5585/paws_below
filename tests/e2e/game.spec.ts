@@ -485,6 +485,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     const crossings = images.filter((view: any) => crossingKeys.has(`${view.point.x},${view.point.y}`)
       && view.object.frame.name === 'farm-4');
     const fences = images.filter((view: any) => view.object.frame.name === 'farm-5');
+    const wallViews = scene.tileViews.filter((view: any) => view.occludesActor);
     const blockCounts = scene.world.blocks.flatMap((block: any) => {
       const counts: number[] = [];
       for (let y=block.y;y<block.y+block.height;y++) for (let x=block.x;x<block.x+block.width;x++) {
@@ -498,7 +499,13 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       everyBlockOnce: blockCounts.every((count: number) => count === 1),
       grassAnchorY: images.find((view: any) => view.object.frame.name === 'farm-0')?.object.originY,
       barnCount: scene.children.list.filter((object: any) => object.texture?.key === 'farm-atlas' && object.frame?.name === 'farm-2').length,
-      fences: fences.map((view: any) => ({ width: view.object.displayWidth, flipX: view.object.flipX }))
+      fences: fences.map((view: any) => ({
+        width: view.object.displayWidth,
+        flipX: view.object.flipX,
+        coveredPoints: view.coveredPoints,
+        overlaps: view.coveredPoints?.some((point: any) => wallViews.some((other: any) => other !== view
+          && other.coveredPoints?.some((covered: any) => covered.x === point.x && covered.y === point.y)))
+      }))
     };
   });
   expect(farmFixture).toEqual(expect.objectContaining({
@@ -506,13 +513,23 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
   expect(farmFixture.fences.length).toBeGreaterThan(0);
-  expect(farmFixture.fences.every((fence: any) => fence.width === 160 && fence.flipX)).toBe(true);
-  await page.evaluate(() => {
+  expect(farmFixture.fences.every((fence: any) => fence.width === 160
+    && fence.coveredPoints.length === 2 && !fence.overlaps)).toBe(true);
+  expect([...new Set(farmFixture.fences.map((fence: any) => fence.flipX))].sort()).toEqual([false, true]);
+  await page.evaluate((flipX) => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
-    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas' && view.object.frame?.name === 'farm-5');
+    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-5' && view.object.flipX === flipX);
     scene.cameras.main.centerOn(fence.object.x, fence.object.y);
-  });
-  await page.screenshot({path:testInfo.outputPath('farm-fence.png')});
+  }, false);
+  await page.screenshot({path:testInfo.outputPath('farm-fence-northwest-southeast.png')});
+  await page.evaluate((flipX) => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const fence = scene.tileViews.find((view: any) => view.object.texture?.key === 'farm-atlas'
+      && view.object.frame?.name === 'farm-5' && view.object.flipX === flipX);
+    scene.cameras.main.centerOn(fence.object.x, fence.object.y);
+  }, true);
+  await page.screenshot({path:testInfo.outputPath('farm-fence-southwest-northeast.png')});
   const crossingPose = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     scene.player.x = 11; scene.player.y = 8; scene.player.jumpLift = 0; scene.player.surfaceLift = 0;
