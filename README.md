@@ -33,6 +33,7 @@ The installed game launches in landscape standalone mode. Its small menu shell i
 - Touch controls: detected automatically on phones and hybrid laptops, or forced on/off from Settings and Pause
 - Touch movement: switch between Follow Touch and Joystick from Settings or Pause
 - Guidance: the HUD tracks the trip home and collection progress, with stronger contextual prompts and extra help if the animal stops making progress
+- Power treats: named HUD cards show each active ability and countdown; the first pickup of each kind pauses for a short, one-time explanation
 
 ## Checks
 
@@ -43,7 +44,7 @@ npm run test:e2e
 npm run build
 ```
 
-The unit suite checks animals and map-specific goals, per-animal scores, appearance migration, score-only reset behavior, powers, saves, treasure selection, map reachability, obstacle separation, crossing definitions, isometric depth ordering, and orientation-guard decisions. The Playwright suite checks the title → animal → map flow, Settings confirmation/cancellation, both environments, desktop rendering, landscape touch input, same-session portrait/landscape transitions, atlas integrity, and representative behind/in-front renderer fixtures.
+The unit suite checks animals and map-specific goals, per-animal scores, appearance and power-tip migration, score-only reset behavior, powers, saves, treasure selection, map reachability, obstacle separation, crossing definitions, isometric depth ordering, and orientation-guard decisions. The Playwright suite checks the title → animal → map flow, first-use power explanations and countdowns, Settings confirmation/cancellation, both environments, desktop rendering, landscape touch input, same-session portrait/landscape transitions, atlas integrity, and representative behind/in-front renderer fixtures.
 
 ## Improvement roadmap
 
@@ -55,7 +56,7 @@ See [`docs/IMPROVEMENTS.md`](docs/IMPROVEMENTS.md) for the prioritized game, mob
 - `src/game/rendering` contains the environment renderer and semantic atlas/ground-anchor contract.
 - `src/game/systems` contains persistence, scoring, sound, treasure selection, layout, collection, guidance, and rendering helpers.
 - `src/game/systems/assets.ts` owns deferred animal/map loading and shared atlas registration.
-- `src/game/scenes` contains the title, animal selection, map selection, tutorial, maze, pause, return-home, collection, and results flows.
+- `src/game/scenes` contains the title, Settings, animal selection, map selection, tutorial, loading, maze, power-tip, pause, return-home, collection, and results flows.
 - `public/assets/pip-animations.webp` contains Pip's transparent, safely padded run, dig, jump, bark, and idle animation frames.
 - `public/assets/title-animals.webp` is the two-animal burrow-and-farm title artwork.
 - `public/assets/bunny-animations.webp` contains transparent, individually repacked run, dig, jump, honk, and idle frames with guarded edges that prevent sprite wrapping.

@@ -3,7 +3,7 @@ import type { AnimalDefinition, GridPoint, LevelDefinition } from '../types';
 import type { WorldDefinition } from '../data/worlds';
 import { diamondHalfToward, diamondPoints, GroundDepth, projectGridPoint } from '../systems/rendering';
 import {
-  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan, wallInsetTowardGround,
+  ENVIRONMENT_ASSETS, placeProjectedSprite, placementForWallSpan, wallFlipForGridAxes, wallInsetTowardGround, wallOffsetForCell,
   type EnvironmentAssetId, type ProjectedSpriteAsset, type WorldPropPlacement
 } from './catalog';
 
@@ -283,11 +283,16 @@ export class EnvironmentRenderer {
       const point = { x, y };
       const assetId = assetForWall(this.world, point, blocks.has(key));
       const definition = ENVIRONMENT_ASSETS[assetId === 'farm-boundary-fence' ? this.world.rendering.wallAsset : assetId];
-      const inset = this.boundaryWallInset(point);
+      const directions = this.groundDirections(point);
+      const inset = wallOffsetForCell(blocks.has(key), directions);
+      const group = wallGroups.get(key);
+      const flipX = definition.id === 'burrow-wall'
+        ? wallFlipForGridAxes(runLength(point, 1, 0, group), runLength(point, 0, 1, group), directions)
+        : undefined;
       const image = placeProjectedSprite(this.scene, point, definition, {
-        placementOffset: inset, depthOffset: inset
+        placementOffset: inset, depthOffset: inset, flipX
       });
-      this.track({ x: point.x + inset.x, y: point.y + inset.y }, [image], true, wallGroups.get(key), [point]);
+      this.track({ x: point.x + inset.x, y: point.y + inset.y }, [image], true, group, [point]);
     });
     new Set(wallGroups.values()).forEach(groupId => {
       const members = this.views.filter(view => view.occlusionGroup === groupId);

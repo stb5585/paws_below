@@ -1,5 +1,5 @@
 import type { TouchControlPreference, TouchMovementPreference } from './device';
-import type { MapId } from '../types';
+import type { MapId, PowerKind } from '../types';
 
 export const PROFILE_KEY = 'paws-below-profile-v1';
 
@@ -29,6 +29,7 @@ export interface PlayerProfile {
   seenAnimals: string[];
   seenLevels: string[];
   bestScores: Record<string, number>;
+  seenPowerTips: PowerKind[];
   appearance: AppearanceProfile;
 }
 
@@ -55,13 +56,14 @@ export const DEFAULT_PROFILE: PlayerProfile = {
   seenAnimals: [],
   seenLevels: [],
   bestScores: { 'white-dog': 0, 'cream-bunny': 0 },
+  seenPowerTips: [],
   appearance: DEFAULT_APPEARANCE
 };
 
 function freshDefaultProfile(): PlayerProfile {
   return {
     ...DEFAULT_PROFILE,
-    collection: [], seenAnimals: [], seenLevels: [], bestScores: { ...DEFAULT_PROFILE.bestScores },
+    collection: [], seenAnimals: [], seenLevels: [], bestScores: { ...DEFAULT_PROFILE.bestScores }, seenPowerTips: [],
     appearance: cloneAppearance(DEFAULT_APPEARANCE)
   };
 }
@@ -125,8 +127,15 @@ export function sanitizeProfile(value: unknown): PlayerProfile {
       ? [...new Set(candidate.seenLevels.filter((id): id is string => typeof id === 'string'))]
       : [],
     bestScores: sanitizeBestScores(candidate.bestScores, bestScore),
+    seenPowerTips: Array.isArray(candidate.seenPowerTips)
+      ? [...new Set(candidate.seenPowerTips.filter(isPowerKind))]
+      : [],
     appearance: sanitizeAppearance(candidate.appearance)
   };
+}
+
+function isPowerKind(value: unknown): value is PowerKind {
+  return value === 'zoomie' || value === 'glow' || value === 'sniff';
 }
 
 function sanitizeBestScores(value: unknown, legacyBest: number): Record<string, number> {
@@ -145,6 +154,12 @@ export function resetBestScores(profile: PlayerProfile): PlayerProfile {
     bestScore: 0,
     bestScores: Object.fromEntries(Object.keys(profile.bestScores).map(animalId => [animalId, 0]))
   };
+}
+
+export function markPowerTipSeen(profile: PlayerProfile, kind: PowerKind): PlayerProfile {
+  return profile.seenPowerTips.includes(kind)
+    ? profile
+    : { ...profile, seenPowerTips: [...profile.seenPowerTips, kind] };
 }
 
 export function loadProfile(storage: Pick<Storage, 'getItem'> = localStorage): PlayerProfile {

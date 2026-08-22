@@ -21,6 +21,9 @@ describe('run scoring and powers', () => {
     expect(run.isPowerActive('zoomie', 8_000)).toBe(false);
     run.collectTreat('zoomie', 7_500);
     expect(run.remainingPower('zoomie', 8_000)).toBe(6_500);
+    run.refreshPower('zoomie', 20_000);
+    expect(run.remainingPower('zoomie', 20_000)).toBe(7_000);
+    expect(run.score).toBe(100);
   });
 
   it('never scores the same unearthed object twice', () => {

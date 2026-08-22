@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_PROFILE, PROFILE_KEY, addDiscoveries, loadProfile, resetBestScores,
+  DEFAULT_PROFILE, PROFILE_KEY, addDiscoveries, loadProfile, markPowerTipSeen, resetBestScores,
   sanitizeProfile, saveProfile
 } from '../src/game/systems/profile';
 
@@ -42,6 +42,16 @@ describe('player profile', () => {
     delete oldSave.touchMovement;
     expect(sanitizeProfile(oldSave).touchMovement).toBe('follow');
     expect(sanitizeProfile({ ...DEFAULT_PROFILE, touchMovement: 'joystick' }).touchMovement).toBe('joystick');
+  });
+
+  it('migrates, sanitizes, and records one-time power explanations', () => {
+    const oldSave = { ...DEFAULT_PROFILE } as Partial<typeof DEFAULT_PROFILE>;
+    delete oldSave.seenPowerTips;
+    expect(sanitizeProfile(oldSave).seenPowerTips).toEqual([]);
+    expect(sanitizeProfile({ ...DEFAULT_PROFILE, seenPowerTips: ['zoomie', 'zoomie', 'bad-power'] }).seenPowerTips).toEqual(['zoomie']);
+    const seen = markPowerTipSeen(DEFAULT_PROFILE, 'glow');
+    expect(seen.seenPowerTips).toEqual(['glow']);
+    expect(markPowerTipSeen(seen, 'glow')).toBe(seen);
   });
 
   it('migrates per-animal progress without losing the legacy dog score', () => {
@@ -95,6 +105,7 @@ describe('player profile', () => {
     const profile = sanitizeProfile({
       ...DEFAULT_PROFILE, bestScore: 900, bestScores: { 'white-dog': 900, 'cream-bunny': 450 },
       collection: ['striped-sock'], pirateBadge: true, muted: true,
+      seenPowerTips: ['zoomie'],
       appearance: { version: 1, animals: { 'white-dog': {
         palette: 'warm-gold', homeStyle: 'classic-doghouse', extras: { collar: 'mint-stars' }
       } } }
@@ -105,6 +116,7 @@ describe('player profile', () => {
     expect(reset.collection).toEqual(['striped-sock']);
     expect(reset.pirateBadge).toBe(true);
     expect(reset.muted).toBe(true);
+    expect(reset.seenPowerTips).toEqual(['zoomie']);
     expect(reset.appearance).toEqual(profile.appearance);
   });
 });

@@ -54,7 +54,7 @@ test('title, tutorial, and maze render without browser errors', async ({ page },
   await expect.poll(async () => page.evaluate(({ x, y }) => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     return Math.hypot(scene.player.x - x, scene.player.y - y);
-  }, jumpStart), { timeout: 15_000 }).toBeGreaterThan(.02);
+  }, jumpStart), { timeout: 30_000 }).toBeGreaterThan(.02);
   await expect.poll(async () => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
   await page.keyboard.press('e');
   await page.waitForTimeout(100);
@@ -135,6 +135,79 @@ test('landscape touch layout accepts gameplay taps', async ({ page }, testInfo) 
   await expect(canvas).toBeVisible();
 });
 
+test('first power pickup explains the effect once and keeps a named countdown visible', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-chromium');
+  test.slow(); // Two scene pause/resume cycles are slow under software WebGL.
+  await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
+    version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
+    fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
+    selectedAnimalId: 'white-dog', selectedMapId: 'underground', seenAnimals: ['white-dog'],
+    seenLevels: ['white-dog:underground'], bestScores: { 'white-dog': 0, 'cream-bunny': 0 },
+    seenPowerTips: []
+  })));
+  const active = (scene: string) => page.evaluate(key => (window as any).__PAWS_GAME__.scene.isActive(key), scene);
+  await page.goto('/');
+  await expect.poll(() => active('Title')).toBe(true);
+  await page.mouse.click(640, 270);
+  await expect.poll(() => active('AnimalSelect')).toBe(true);
+  await page.mouse.click(390, 530);
+  await expect.poll(() => active('MapSelect')).toBe(true);
+  await page.mouse.click(390, 535);
+  await expect.poll(() => active('Maze'), { timeout: 30_000 }).toBe(true);
+
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const treat = scene.collectibleViews.find((view: any) => view.definition.power === 'zoomie');
+    scene.player.x = treat.definition.position.x;
+    scene.player.y = treat.definition.position.y;
+    scene.pickupFrom = { ...treat.definition.position };
+    scene.collectNearby(scene.time.now, scene.pickupFrom);
+  });
+  await expect.poll(() => active('PowerTip')).toBe(true);
+  expect(await page.evaluate(() => (window as any).__PAWS_GAME__.scene.isPaused('Maze'))).toBe(true);
+  const tipCopy = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('PowerTip');
+    return scene.children.list.map((child: any) => child.text).filter(Boolean).join(' | ');
+  });
+  expect(tipCopy).toContain('ZOOMIES');
+  expect(tipCopy).toContain('Run much faster.');
+  expect(tipCopy).toContain('LASTS 7 SECONDS');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('paws-below-profile-v1')!).seenPowerTips)).toEqual(['zoomie']);
+
+  await page.keyboard.press('Enter');
+  await expect.poll(() => active('PowerTip')).toBe(false);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isPaused('Maze'))).toBe(false);
+  const hud = await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const view = scene.powerHud.get('zoomie');
+    scene.run.refreshPower('zoomie', scene.game.loop.time);
+    scene.updateHud(scene.game.loop.time);
+    scene.showFirstPowerTip('zoomie');
+    return {
+      copy: view.container.list.map((child: any) => child.text).filter(Boolean),
+      timer: view.timer.text,
+      tipActive: (window as any).__PAWS_GAME__.scene.isActive('PowerTip')
+    };
+  });
+  expect(hud.copy).toContain('ZOOMIES');
+  expect(hud.timer).toMatch(/^[1-7]s$/);
+  expect(hud.tipActive).toBe(false);
+
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    const treat = scene.collectibleViews.find((view: any) => view.definition.power === 'glow');
+    scene.player.x = treat.definition.position.x;
+    scene.player.y = treat.definition.position.y;
+    scene.pickupFrom = { ...treat.definition.position };
+    scene.collectNearby(scene.game.loop.time, scene.pickupFrom);
+  });
+  await expect.poll(() => active('PowerTip')).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect.poll(() => active('PowerTip')).toBe(false);
+  await expect.poll(() => page.evaluate(() => (window as any).__PAWS_GAME__.scene.isPaused('Maze'))).toBe(false);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('paws-below-profile-v1')!).seenPowerTips)).toEqual(['zoomie', 'glow']);
+});
+
 test('pause actions clear when resuming or abandoning a run', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
@@ -213,6 +286,7 @@ test('every gameplay atlas keeps visible pixels inside guarded frame cells', asy
 
 test('isometric depth follows ground contact around a blocked tile', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
+  test.slow(); // Multiple renderer screenshots are slow under software WebGL.
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
     version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
     fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
@@ -230,12 +304,18 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
 
   const behind = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
-    const walls = scene.tileViews.filter((view: any) => view.point.x === 4 && view.point.y === 3
+    const walls = scene.tileViews.filter((view: any) => view.coveredPoints?.some((point: any) => point.x === 4 && point.y === 3)
       && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
-    const connectedWall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 4
+    const connectedWall = scene.tileViews.find((view: any) => view.coveredPoints?.some((point: any) => point.x === 4 && point.y === 4)
       && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
     const floors = scene.tileViews.filter((view: any) => view.object.texture?.key === 'burrow-atlas'
       && view.object.frame?.name === 'env-0');
+    const burrowWalls = scene.tileViews.filter((view: any) => view.object.texture?.key === 'burrow-atlas'
+      && view.object.frame?.name === 'env-1');
+    const interiorWalls = burrowWalls.filter((view: any) => view.coveredPoints?.length === 1
+      && scene.world.blocks.some((block: any) => view.coveredPoints[0].x >= block.x
+        && view.coveredPoints[0].x < block.x + block.width && view.coveredPoints[0].y >= block.y
+        && view.coveredPoints[0].y < block.y + block.height));
     scene.player.x = 3; scene.player.y = 3; scene.positionDog(0, false);
     scene.updateVisibility();
     scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
@@ -247,7 +327,12 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
       wallGroup: walls[0]?.occlusionGroup,
       connectedWallGroup: connectedWall?.occlusionGroup,
       maximumFloorDepth: Math.max(...floors.map((view: any) => view.object.depth)),
-      renderedBlockCells: walls.length
+      renderedBlockCells: walls.length,
+      wallDirections: [...new Set(burrowWalls.map((view: any) => view.object.flipX))].sort(),
+      everyInteriorWallCentered: interiorWalls.every((view: any) => view.point.x === view.coveredPoints[0].x
+        && view.point.y === view.coveredPoints[0].y),
+      interiorWallCount: interiorWalls.length,
+      expectedInteriorWallCount: scene.world.blocks.reduce((total: number, block: any) => total + block.width * block.height, 0)
     };
   });
   expect(behind.renderedBlockCells).toBe(1);
@@ -256,10 +341,13 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(behind.wallAlpha).toBe(1);
   expect(behind.connectedWallAlpha).toBe(1);
   expect(behind.connectedWallGroup).toBe(behind.wallGroup);
+  expect(behind.wallDirections).toEqual([false, true]);
+  expect(behind.everyInteriorWallCentered).toBe(true);
+  expect(behind.interiorWallCount).toBe(behind.expectedInteriorWallCount);
   const wallOcclusion = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     const group = scene.wallOcclusionGroups.find((candidate: any) => candidate.id === scene.tileViews.find((view: any) =>
-      view.point.x === 4 && view.point.y === 3 && view.object.frame?.name === 'env-1').occlusionGroup);
+      view.coveredPoints?.some((point: any) => point.x === 4 && point.y === 3) && view.object.frame?.name === 'env-1').occlusionGroup);
     return {
       overlayVisible: scene.dogOcclusionSprite.visible,
       overlayDepth: scene.dogOcclusionSprite.depth,
@@ -293,7 +381,7 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
 
   const inFront = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
-    const wall = scene.tileViews.find((view: any) => view.point.x === 4 && view.point.y === 3
+    const wall = scene.tileViews.find((view: any) => view.coveredPoints?.some((point: any) => point.x === 4 && point.y === 3)
       && view.object.texture?.key === 'burrow-atlas' && view.object.frame?.name === 'env-1');
     scene.player.x = 5; scene.player.y = 4; scene.positionDog(0, false);
     scene.updateVisibility();
@@ -322,6 +410,13 @@ test('isometric depth follows ground contact around a blocked tile', async ({ pa
   expect(undergroundCozyLighting.distantWallAlpha).toBe(1);
   expect(undergroundCozyLighting.distantWallTint).not.toBe(0xffffff);
   await page.screenshot({ path: testInfo.outputPath('underground-cozy-boundary.png') });
+  await page.evaluate(() => {
+    const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
+    scene.profile.fullBrightness = true;
+    scene.player.x = 27; scene.player.y = 18; scene.positionDog(0, false); scene.updateVisibility();
+    scene.cameras.main.centerOn(scene.dog.x, scene.dog.y);
+  });
+  await page.screenshot({ path: testInfo.outputPath('underground-interior-walls.png') });
 });
 
 test('loads the title first and only fetches the selected world', async ({ page }, testInfo) => {
@@ -473,6 +568,7 @@ test('settings cancels or confirms a score-only reset without losing other progr
 
 test('Mochi is grounded in the refined farm collection quest', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-chromium');
+  test.slow(); // Renderer screenshots and game-time tweens advance slowly under software WebGL.
   await page.addInitScript(() => localStorage.setItem('paws-below-profile-v1', JSON.stringify({
     version: 1, bestScore: 0, collection: [], pirateBadge: false, muted: true,
     fullBrightness: true, tutorialSeen: true, touchControls: 'off', touchMovement: 'follow',
@@ -522,16 +618,8 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       && view.coveredPoints?.length === 1 && scene.world.blocks.some((block: any) =>
         view.coveredPoints[0].x >= block.x && view.coveredPoints[0].x < block.x + block.width
         && view.coveredPoints[0].y >= block.y && view.coveredPoints[0].y < block.y + block.height));
-    const exposedBlockWallsAligned = blockWalls.every((view: any) => {
-      const point = view.coveredPoints[0];
-      const directions = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}].filter(direction =>
-        scene.world.isFloorCell(point.x + direction.x, point.y + direction.y)
-        || scene.world.isObstacleCell(point.x + direction.x, point.y + direction.y));
-      if (!directions.length) return view.point.x === point.x && view.point.y === point.y;
-      const expectedX = point.x + directions.reduce((sum: number, direction: any) => sum + direction.x, 0) / directions.length / 2;
-      const expectedY = point.y + directions.reduce((sum: number, direction: any) => sum + direction.y, 0) / directions.length / 2;
-      return view.point.x === expectedX && view.point.y === expectedY;
-    });
+    const everyInteriorWallCentered = blockWalls.every((view: any) =>
+      view.point.x === view.coveredPoints[0].x && view.point.y === view.coveredPoints[0].y);
     return {
       crossings: crossings.length,
       expectedCrossings: crossingKeys.size,
@@ -543,7 +631,9 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
       everyFenceGrounded: fences.every((view: any) => view.coveredPoints.every((point: any) =>
         images.some((candidate: any) => candidate.point.x === point.x && candidate.point.y === point.y
           && candidate.object.frame.name === 'farm-0'))),
-      exposedBlockWallsAligned,
+      everyInteriorWallCentered,
+      interiorWallCount: blockWalls.length,
+      expectedInteriorWallCount: scene.world.blocks.reduce((total: number, block: any) => total + block.width * block.height, 0),
       bottomWallCollision: {
         inside: scene.canOccupy(14, 21.19), outside: scene.canOccupy(14, 21.21)
       },
@@ -558,11 +648,12 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
   });
   expect(farmFixture).toEqual(expect.objectContaining({
     crossings: 3, expectedCrossings: 3, everyBlockOnce: true, barnCount: 1,
-    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true, exposedBlockWallsAligned: true,
+    backFenceInset: .5, sideFenceInset: .5, everyFenceGrounded: true, everyInteriorWallCentered: true,
     bottomWallCollision: { inside: true, outside: false }
   }));
   expect(farmFixture.grassAnchorY).toBeCloseTo(.536, 3);
   expect(farmFixture.fences.length).toBeGreaterThan(0);
+  expect(farmFixture.interiorWallCount).toBe(farmFixture.expectedInteriorWallCount);
   expect(farmFixture.fences.every((fence: any) => fence.width === 160
     && fence.coveredPoints.length === 2 && !fence.overlaps)).toBe(true);
   expect([...new Set(farmFixture.fences.map((fence: any) => fence.flipX))].sort()).toEqual([false, true]);
@@ -627,7 +718,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     scene.player.x = 11; scene.player.y = 7; scene.player.jumpLift = 0; scene.player.surfaceLift = 0; scene.busy = false;
     scene.positionDog(0, false); scene.tryJump(-1, .5);
   });
-  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 60_000 }).toBe(true);
   const landing = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     return {
@@ -642,7 +733,7 @@ test('Mochi is grounded in the refined farm collection quest', async ({ page }, 
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     scene.movePlayer(1, 0, 0, 16); scene.tryJump(0, 0);
   });
-  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 30_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => !(window as any).__PAWS_GAME__.scene.getScene('Maze').busy), { timeout: 60_000 }).toBe(true);
   const turnedLanding = await page.evaluate(() => {
     const scene = (window as any).__PAWS_GAME__.scene.getScene('Maze');
     return { x: scene.player.x, y: scene.player.y, surfaceLift: scene.player.surfaceLift, facingLeft: scene.dogSprite.flipX };

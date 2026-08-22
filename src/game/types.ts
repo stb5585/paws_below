@@ -52,6 +52,9 @@ export interface CollectibleDefinition {
 export interface PowerDefinition {
   kind: PowerKind;
   label: string;
+  icon: string;
+  summary: string;
+  detail: string;
   durationMs: number;
   color: number;
 }

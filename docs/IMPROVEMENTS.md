@@ -59,7 +59,8 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 - Actors now change depth from their ground position rather than using a fixed depth.
 - Walls remain solid and unchanged; when a connected section occludes the animal, a synchronized translucent animal overlay preserves readability without wall transparency seams.
 - Farm fences now derive their orientation, midpoint, and depth anchor from the two boundary cells they replace. Both diagonal wall directions use the same asset with placement-specific flipping, and the complete two-cell span is reserved so corn cannot overlap the fence or shift the apparent row alignment.
-- Boundary walls and fences share the same half-cell ground-contact line on both isometric axes. The fence uses an asset-specific ground anchor matching the corn base and receives clipped, textured foundations on only the wall-facing half of its two covered cells, avoiding gaps without moving the span off its row. Exposed internal wall faces use the same neighbor-aware visual inset while their collision cells remain unchanged over complete themed ground foundations. Cozy-light visibility shades opaque floor surfaces and tints environment sprites instead of fading every tile independently, preventing the scene background from reopening divergent seams.
+- Boundary walls and fences share the same half-cell ground-contact line on both isometric axes. The fence uses an asset-specific ground anchor matching the corn base and receives clipped, textured foundations on only the wall-facing half of its two covered cells, avoiding gaps without moving the span off its row. Multi-cell interior blocks remain centered on their collision cells so connected wall and corn runs cannot be pulled apart by differing exposed neighbors. Cozy-light visibility shades opaque floor surfaces and tints environment sprites instead of fading every tile independently, preventing the scene background from reopening divergent seams.
+- Asymmetric underground wall blocks now mirror along the dominant wall run, so side walls follow both isometric axes instead of all facing one direction.
 - Player collision now checks a nine-point ground footprint rather than only the rounded center position. Perimeter and internal walls therefore stop the complete animal footprint, including along the lower map edges and diagonal corners.
 - Crossings now define a standing height: the animal and shadow rest on top of rocks and hay bales, and directional input can turn the animal before the next jump.
 - Walls, stepping stones, collectibles, effects, decor, and exit elements use the same ordering model.
@@ -95,15 +96,15 @@ The 2.5D presentation still has the highest visible polish gap. Floor diamonds, 
 
 Prompts use keyboard language on keyboard-first devices and touch/action language when touch controls are active. Copy should continue to come from semantic actions rather than scene-specific key strings.
 
-### 6. Clarify the objective and power-ups — In progress
+### 6. Clarify the objective and power-ups — Complete
 
-The HUD now shows the current goal, collected/required totals, and return-home progress. The next step is to make temporary abilities equally legible.
+The HUD shows the current goal, collected/required totals, and return-home progress. Every temporary ability now has a named icon card with a live countdown. The first pickup of each power pauses the run for a concise explanation of its duration, benefit, and unchanged mechanics; dismissed explanations persist in the versioned profile so later runs remain uninterrupted.
 
-**Next work**
+**Completed experience**
 
-- Give each power-up a clear name, icon, remaining duration, and first-use explanation.
-- Explain whether a power affects speed, pickup reach, digging, or hazards.
-- Keep explanations brief and pause gameplay only when a first-use card genuinely helps.
+- Each power-up has a clear name, icon, remaining duration, and first-use explanation.
+- The explanation states whether the power affects speed, pickup reach, digging, or hazards.
+- Explanations remain brief and pause gameplay only for the first-use card.
 
 ### 7. Make the animal sound useful — Complete
 

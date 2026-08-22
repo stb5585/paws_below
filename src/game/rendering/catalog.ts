@@ -102,6 +102,30 @@ export function placementForWallSpan(from: GridPoint, to: GridPoint): WallSpanPl
   };
 }
 
+/** Mirrors an asymmetric single-cell wall so its face follows the dominant wall run. */
+export function wallFlipForGridAxes(
+  xRunLength: number,
+  yRunLength: number,
+  groundDirections: readonly GridPoint[] = []
+): boolean {
+  if (!Number.isInteger(xRunLength) || !Number.isInteger(yRunLength) || xRunLength < 1 || yRunLength < 1) {
+    throw new Error('Wall run lengths must be positive integers');
+  }
+  if (xRunLength !== yRunLength) return yRunLength > xRunLength;
+  const xFacing = groundDirections.filter(direction => direction.x !== 0).length;
+  const yFacing = groundDirections.filter(direction => direction.y !== 0).length;
+  return xFacing > yFacing;
+}
+
+/** Interior blocks stay centered so every sprite in a multi-cell wall remains connected. */
+export function wallOffsetForCell(
+  isInteriorBlock: boolean,
+  groundDirections: readonly GridPoint[],
+  distance = .5
+): GridPoint {
+  return isInteriorBlock ? { x: 0, y: 0 } : wallInsetTowardGround(groundDirections, distance);
+}
+
 /** Moves a wall toward the playable cells it borders. */
 export function wallInsetTowardGround(directions: readonly GridPoint[], distance = .5): GridPoint {
   if (!directions.length) return { x: 0, y: 0 };

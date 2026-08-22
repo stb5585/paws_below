@@ -3,7 +3,7 @@ import {
   GAME_PROJECTION, GroundDepth, UiDepth, WORLD_DEPTH_STRIDE, WorldLayer,
   actorOverlayDepth, blendRgb, diamondHalfToward, diamondPoints, projectGridPoint, visibilityTint, worldDepth
 } from '../src/game/systems/rendering';
-import { ENVIRONMENT_ASSETS, placementForWallSpan, wallInsetTowardGround } from '../src/game/rendering/catalog';
+import { ENVIRONMENT_ASSETS, placementForWallSpan, wallFlipForGridAxes, wallInsetTowardGround, wallOffsetForCell } from '../src/game/rendering/catalog';
 
 describe('isometric rendering order', () => {
   it('keeps the complete floor below y-sorted actors', () => {
@@ -92,6 +92,15 @@ describe('isometric rendering order', () => {
     expect(() => placementForWallSpan({ x: 3, y: 4 }, { x: 5, y: 4 })).toThrow();
   });
 
+  it('orients asymmetric burrow walls along both isometric grid axes', () => {
+    expect(wallFlipForGridAxes(5, 2)).toBe(false);
+    expect(wallFlipForGridAxes(2, 5)).toBe(true);
+    expect(wallFlipForGridAxes(1, 1, [{ x: 1, y: 0 }])).toBe(true);
+    expect(wallFlipForGridAxes(1, 1, [{ x: 0, y: 1 }])).toBe(false);
+    expect(wallFlipForGridAxes(1, 1, [{ x: 1, y: 0 }, { x: 0, y: 1 }])).toBe(false);
+    expect(() => wallFlipForGridAxes(0, 2)).toThrow();
+  });
+
   it('anchors outside walls halfway toward their neighboring ground', () => {
     expect(wallInsetTowardGround([{ x: 0, y: 1 }])).toEqual({ x: 0, y: .5 });
     expect(wallInsetTowardGround([{ x: -1, y: 0 }])).toEqual({ x: -.5, y: 0 });
@@ -100,6 +109,13 @@ describe('isometric rendering order', () => {
     expect(wallInsetTowardGround([{ x: 0, y: 1 }], 1)).toEqual({ x: 0, y: 1 });
     expect(wallInsetTowardGround([])).toEqual({ x: 0, y: 0 });
     expect(() => wallInsetTowardGround([{ x: 1, y: 1 }])).toThrow();
+  });
+
+  it('keeps interior wall cells centered while only outside boundaries receive an inset', () => {
+    expect(wallOffsetForCell(true, [{ x: 1, y: 0 }])).toEqual({ x: 0, y: 0 });
+    expect(wallOffsetForCell(true, [{ x: 1, y: 0 }, { x: 0, y: 1 }])).toEqual({ x: 0, y: 0 });
+    expect(wallOffsetForCell(false, [{ x: 1, y: 0 }])).toEqual({ x: .5, y: 0 });
+    expect(wallOffsetForCell(false, [{ x: 0, y: -1 }])).toEqual({ x: 0, y: -.5 });
   });
 
   it('uses hay bales with explicit standing height for every farm crossing variant', () => {

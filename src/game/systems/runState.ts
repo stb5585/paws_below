@@ -12,8 +12,9 @@ export class RunState {
   collectTreat(kind: PowerKind, now: number): void {
     this.treatsFound += 1;
     this.score += 50;
-    this.powers.set(kind, now + POWERS[kind].durationMs);
+    this.refreshPower(kind, now);
   }
+  refreshPower(kind: PowerKind, now: number): void { this.powers.set(kind, now + POWERS[kind].durationMs); }
   collectTreasure(treasure: BuriedTreasureDefinition): boolean {
     if (this.treasures.includes(treasure)) return false;
     this.treasures.push(treasure);

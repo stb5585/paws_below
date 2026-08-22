@@ -5,7 +5,7 @@ import {
 } from '../data/content';
 import { UNDERGROUND_WORLD, getWorld, type WorldDefinition } from '../data/worlds';
 import type { ActiveDigSpot, AnimalDefinition, CollectibleDefinition, GridPoint, LevelDefinition, PlayerActions, PowerKind, RunResults } from '../types';
-import { addDiscoveries, animalBestScore, saveProfile, type PlayerProfile } from '../systems/profile';
+import { addDiscoveries, animalBestScore, markPowerTipSeen, saveProfile, type PlayerProfile } from '../systems/profile';
 import { RunState } from '../systems/runState';
 import { activateThemedDigSpots } from '../systems/treasure';
 import type { Soundscape } from '../systems/audio';
@@ -25,6 +25,7 @@ interface CollectibleView { definition: CollectibleDefinition; object: Phaser.Ga
 interface DigView { spot: ActiveDigSpot; object: Phaser.GameObjects.Container }
 interface UiAnchor { object: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform; x: number; y: number }
 interface TouchTarget { circle: Phaser.GameObjects.Arc; x: number; y: number; radius: number }
+interface PowerHudView { container: Phaser.GameObjects.Container; timer: Phaser.GameObjects.Text }
 
 export class MazeScene extends Phaser.Scene {
   private player: PlayerModel = { ...BURROW.start, jumpLift: 0, surfaceLift: 0 };
@@ -47,13 +48,14 @@ export class MazeScene extends Phaser.Scene {
   private objectiveText!: Phaser.GameObjects.Text;
   private digPrompt!: Phaser.GameObjects.Container;
   private jumpPrompt!: Phaser.GameObjects.Container;
-  private powerHud = new Map<PowerKind, Phaser.GameObjects.Container>();
+  private powerHud = new Map<PowerKind, PowerHudView>();
   private hint!: Phaser.GameObjects.Container;
   private treasureHint!: Phaser.GameObjects.Container;
   private treasureHintArrow!: Phaser.GameObjects.Text;
   private barkTreasureTarget?: DigView;
   private barkTreasureUntil = 0;
   private exitReminderUntil = 0;
+  private pendingPowerTip?: PowerKind;
   private lastDiscovery = 0;
   private bestExitDistance = Infinity;
   private visited = new Set<string>();
@@ -94,6 +96,7 @@ export class MazeScene extends Phaser.Scene {
     this.lastDiscovery = this.time.now;
     this.bestExitDistance = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.level.exit.x, this.level.exit.y);
     this.barkTreasureTarget = undefined; this.barkTreasureUntil = 0;
+    this.pendingPowerTip = undefined;
     this.layout = getGameLayout(this);
     this.cameras.main.setBackgroundColor(this.world.theme === 'farm' ? '#314b2b' : '#170e0b');
     this.cameras.main.setBounds(0, 0, 3500, 1650);
@@ -115,12 +118,14 @@ export class MazeScene extends Phaser.Scene {
     this.game.events.on('touch-controls-changed', this.syncTouchControls, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.events.on(Phaser.Scenes.Events.PAUSE, this.stopTouchMovement, this);
+    this.events.on(Phaser.Scenes.Events.RESUME, this.resumePowerTip, this);
     window.addEventListener('blur', this.stopTouchMovement);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off('brightness-changed', this.updateVisibility, this);
       this.game.events.off('touch-controls-changed', this.syncTouchControls, this);
       this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
       this.events.off(Phaser.Scenes.Events.PAUSE, this.stopTouchMovement, this);
+      this.events.off(Phaser.Scenes.Events.RESUME, this.resumePowerTip, this);
       window.removeEventListener('blur', this.stopTouchMovement);
       this.input.off('pointerdown', this.beginFollowTouch, this);
       this.input.off('pointermove', this.moveTouchPointer, this);
@@ -212,11 +217,15 @@ export class MazeScene extends Phaser.Scene {
     this.anchorUi(objectiveBg, 1040, 112); this.anchorUi(this.objectiveText, 1040, 111);
     (Object.keys(POWERS) as PowerKind[]).forEach((kind, index) => {
       const x = 500 + index * 145;
-      const bg = this.add.rectangle(0, 0, 128, 55, 0x2b1913, .82).setStrokeStyle(2, POWERS[kind].color, .5);
-      const icon = this.add.text(-43, 0, kind === 'zoomie' ? '⚡' : kind === 'glow' ? '☀' : '👃', {fontSize:'26px'}).setOrigin(.5);
-      const text = this.add.text(10, 0, '', {fontFamily:'Fredoka, sans-serif',fontSize:'17px',color:'#fff1ca',fontStyle:'bold'}).setOrigin(.5);
-      const container = this.add.container(x, 50, [bg,icon,text]).setScrollFactor(0).setDepth(UiDepth.hudContent).setAlpha(.3);
-      this.powerHud.set(kind, container);
+      const power = POWERS[kind];
+      const bg = this.add.rectangle(0, 0, 136, 62, 0x2b1913, .86).setStrokeStyle(2, power.color, .6);
+      const icon = this.add.text(-49, 0, power.icon, {fontSize:'24px'}).setOrigin(.5);
+      const name = this.add.text(13, -12, power.label, {
+        fontFamily:'Fredoka, sans-serif',fontSize:'11px',color:`#${power.color.toString(16).padStart(6, '0')}`,fontStyle:'bold'
+      }).setOrigin(.5);
+      const timer = this.add.text(13, 12, '—', {fontFamily:'Fredoka, sans-serif',fontSize:'17px',color:'#fff1ca',fontStyle:'bold'}).setOrigin(.5);
+      const container = this.add.container(x, 52, [bg,icon,name,timer]).setScrollFactor(0).setDepth(UiDepth.hudContent).setAlpha(.3);
+      this.powerHud.set(kind, { container, timer });
       this.anchorUi(container, x, 50);
     });
     this.hint = this.add.container(0, 0).setDepth(worldDepth(0, WorldLayer.effect)).setAlpha(0);
@@ -538,7 +547,10 @@ export class MazeScene extends Phaser.Scene {
       if(canCollectAlongPath(view.definition, from, this.player, this.world.isFloorCell)){
         view.collected=true; this.lastDiscovery=time;
         if(view.definition.kind==='food')this.run.collectFood();
-        else {const power=view.definition.power!;this.run.collectTreat(power,time);this.audio.power(power);this.showPowerLabel(power);}
+        else {
+          const power=view.definition.power!;
+          this.run.collectTreat(power,time);this.audio.power(power);this.showPowerLabel(power);this.showFirstPowerTip(power);
+        }
         this.audio.pickup();this.updateScore();
         const dogWorld = projectGridPoint(this.player);
         view.object.setDepth(worldDepth(dogWorld.y, WorldLayer.effect));
@@ -555,6 +567,24 @@ export class MazeScene extends Phaser.Scene {
     const label=this.add.text(x,y,POWERS[kind].label,{fontFamily:'Fredoka, sans-serif',fontSize:'40px',color:`#${POWERS[kind].color.toString(16).padStart(6,'0')}`,fontStyle:'bold',stroke:'#301a13',strokeThickness:7}).setOrigin(.5).setScrollFactor(0).setDepth(UiDepth.announcement).setScale(.6);
     this.tweens.add({targets:label,scale:1,alpha:{from:1,to:0},y:y-30,duration:1300,ease:'Back.out',onComplete:()=>label.destroy()});
   }
+
+  private showFirstPowerTip(kind: PowerKind): void {
+    if (this.profile.seenPowerTips.includes(kind)) return;
+    this.profile = markPowerTipSeen(this.profile, kind);
+    saveProfile(this.profile); this.registry.set('profile', this.profile);
+    this.pendingPowerTip = kind;
+    this.stopTouchMovement();
+    this.scene.pause();
+    this.scene.launch('PowerTip', { kind });
+  }
+
+  private resumePowerTip = (): void => {
+    if (!this.pendingPowerTip) return;
+    const now = this.game.loop.time;
+    this.run.refreshPower(this.pendingPowerTip, now);
+    this.pendingPowerTip = undefined;
+    this.updateHud(now);
+  };
 
   private updateDiscovery(time:number):void{
     const key=`${Math.round(this.player.x)},${Math.round(this.player.y)}`;
@@ -610,7 +640,7 @@ export class MazeScene extends Phaser.Scene {
   private updateHud(time:number):void{
     (Object.keys(POWERS)as PowerKind[]).forEach(kind=>{
       const view=this.powerHud.get(kind)!;const remaining=this.run.remainingPower(kind,time);
-      view.setAlpha(remaining>0?1:.25);(view.getAt(2)as Phaser.GameObjects.Text).setText(remaining>0?`${Math.ceil(remaining/1000)}s`:'—');
+      view.container.setAlpha(remaining>0?1:.3);view.timer.setText(remaining>0?`${Math.ceil(remaining/1000)}s`:'—');
     });
     const nearJump=!!this.nearbyJumpNode();const nearDig=!!this.nearDigSpot();
     const touchActive=shouldShowTouchControls(this.profile.touchControls);

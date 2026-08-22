@@ -78,10 +78,22 @@ export const LEVELS: LevelDefinition[] = [BURROW, RABBIT_BURROW, DOG_FARM, BUNNY
 export const getLevelForAnimal = (animalId: string, mapId: MapId = 'underground'): LevelDefinition =>
   LEVELS.find(level => level.animalId === animalId && level.mapId === mapId) ?? BURROW;
 
-export const POWERS: Record<string, PowerDefinition> = {
-  zoomie: { kind: 'zoomie', label: 'ZOOMIES!', durationMs: 7_000, color: 0xff8765 },
-  glow: { kind: 'glow', label: 'BIG GLOW!', durationMs: 10_000, color: 0xffdf78 },
-  sniff: { kind: 'sniff', label: 'SUPER SNIFF!', durationMs: 6_000, color: 0x79d9dc }
+export const POWERS: Record<PowerDefinition['kind'], PowerDefinition> = {
+  zoomie: {
+    kind: 'zoomie', label: 'ZOOMIES', icon: '⚡', summary: 'Run much faster.',
+    detail: 'Movement gets faster. Jumping, digging, pickup reach, and hazards stay the same.',
+    durationMs: 7_000, color: 0xff8765
+  },
+  glow: {
+    kind: 'glow', label: 'BIG GLOW', icon: '☀', summary: 'See farther.',
+    detail: 'Your cozy light grows larger. Movement, digging, pickups, and hazards stay the same.',
+    durationMs: 10_000, color: 0xffdf78
+  },
+  sniff: {
+    kind: 'sniff', label: 'SUPER SNIFF', icon: '👃', summary: 'Reveal nearby finds.',
+    detail: 'Nearby food and dig spots shine through the dark. Movement and hazards stay the same.',
+    durationMs: 6_000, color: 0x79d9dc
+  }
 };
 
 export const ZOOMIE_SPEED_MULTIPLIER = 1.9;
